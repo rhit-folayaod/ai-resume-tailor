@@ -309,3 +309,39 @@ including `C++` and `C#`, deterministic ranking restricted to input bullets,
 rejection and retry when a mocked model leaves the candidate set, and an
 end-to-end run producing a real PDF. All present, plus CLI behavior and Tectonic
 error parsing.
+
+## Phase 8 — Documentation
+
+File: `README.md`.
+
+The no-fabrication section is written as an argument rather than a promise: the
+store is the only source of text, there is exactly one method through which a
+model can speak, neither caller's output is printed, the rerank schema has no
+text field so generated text is never read, and the candidate set is frozen
+before the call and checked after it. Each claim points at the file that
+implements it, so it can be checked rather than taken on faith.
+
+Also documented: Tectonic install per platform (Windows gets the direct-download
+path, since there is no reliable package entry), the
+`RESUME_TAILOR_TECTONIC`/`PATH`/`.tools` lookup order, OpenAI-compatible
+endpoint configuration, every CLI flag, and the template's two editing gotchas.
+
+The `projects.yaml` section is the longest, deliberately — the tool can only
+choose among sentences already written, so a thin store produces a thin resume
+no matter how good the ranking is. It covers writing more bullets than fit,
+keeping each one standalone, the difference between `technologies` (prints) and
+`domains`/`keywords` (matching only), and keeping real content in an untracked
+copy passed via `--projects`.
+
+No badges, no emoji headings, and no claimed capabilities that do not exist.
+
+## Status
+
+All eight phases are done. 76 tests pass with no network access, and the
+pipeline runs end to end to a compiled PDF.
+
+What is left is content, not code: `projects.yaml` ships with structure and
+empty `bullets`. Fill those in and the tool starts being useful. Visual
+iteration on the template is the other open item — the layout follows the
+existing resume, but it was designed against fixture data rather than your real
+content.
