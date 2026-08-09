@@ -107,7 +107,6 @@ def build_context(
         entries[project.section].append(
             {
                 "title": project.organization or project.name,
-                "subtitle": project.name if project.organization else "",
                 "role": project.role,
                 "location": project.location,
                 "dates": project.dates.display,

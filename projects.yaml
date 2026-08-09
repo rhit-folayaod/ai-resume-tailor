@@ -85,8 +85,9 @@ projects:
     bullets: []
 
   - id: rhv-gas-valve
+    # No `organization` here: the heading line uses `organization` when set and
+    # `name` otherwise, and this entry reads better as the full project name.
     name: RHV - Gas Valve Calibration System
-    organization: RHV
     role: Software Engineer Intern
     location: Terre Haute, IN
     section: experience

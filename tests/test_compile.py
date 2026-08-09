@@ -18,6 +18,7 @@ def tectonic_or_skip() -> str:
 def test_missing_tectonic_explains_itself(monkeypatch, tmp_path):
     monkeypatch.delenv(TECTONIC_ENV_VAR, raising=False)
     monkeypatch.setattr("resume_tailor.compile.shutil.which", lambda _: None)
+    monkeypatch.setattr("resume_tailor.compile._local_roots", lambda: [tmp_path])
     monkeypatch.chdir(tmp_path)
     with pytest.raises(CompileError, match="tectonic was not found"):
         find_tectonic()

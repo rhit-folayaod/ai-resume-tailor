@@ -235,3 +235,44 @@ Verified end to end: the Phase 4 template compiles to a real PDF (first run
 took ~50s while Tectonic downloaded packages; cached runs are fast), and a
 deliberately broken document produces "Undefined control sequence" with the
 offending line rather than a wall of log.
+
+## Phase 6 — CLI
+
+Files: `src/resume_tailor/cli.py`, `tests/test_cli.py`.
+
+```
+resume-tailor --jd jd.txt --out resume.pdf [--max-bullets N] [--dry-run]
+cat jd.txt | resume-tailor --dry-run
+```
+
+Beyond the spec's flags: `--max-projects` and `--max-bullets-per-project` (the
+budget is three numbers, not one), `--llm-rank` to opt into the model reorder,
+`--reorder-skills`, `--projects` to point at a different store, `--model`,
+`--tectonic`, and `--emit-tex` to keep the generated `.tex` for debugging.
+
+**`--dry-run`** prints the parsed posting, then each selected entry with its
+score, each chosen bullet with its own score and the terms it matched, and then
+what was left out with the reason — "outscored" versus "no bullets written yet",
+which are very different problems. That last distinction is the one that catches
+a half-filled `projects.yaml` before it costs you an application.
+
+**Failures.** Every expected failure is a `ResumeTailorError` subclass, and
+`main` converts them to `click.ClickException`, so a missing store, a malformed
+entry, an empty posting, a bad budget, or a missing Tectonic all exit with one
+actionable line and no traceback. Tests assert on that directly, including that
+"Traceback" never appears. Tectonic is located *before* the model is called, so
+a missing binary does not cost an API call to discover.
+
+`make_client` is a module-level indirection purely so tests can substitute a
+scripted fake; the CLI suite runs the full pipeline, PDF included, with no
+network access.
+
+**Visual check.** Rendered a preview from fixture data (`out/preview.pdf`, not
+committed). Text extracts in clean reading order, which is the thing that
+matters for ATS parsing, and `C#`, `C++`, and `40%` all survive escaping.
+
+One layout fix it surfaced: the heading uses `organization` when set and `name`
+otherwise, which silently dropped "Gas Valve Calibration System" from the RHV
+entry. That entry no longer sets `organization`, with a comment saying why. Also
+removed a `subtitle` value that `build_context` computed but the template never
+used.

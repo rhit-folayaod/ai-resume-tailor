@@ -28,6 +28,17 @@ _LINE_REF_RE = re.compile(r"^l\.(\d+)\s*(.*)$")
 _MISSING_FILE_RE = re.compile(r"(?:file|package)\s+[`\"']?([\w\-.]+)[`\"']?\s+not found", re.I)
 
 
+def _local_roots() -> list[Path]:
+    """Where a manually downloaded binary might live.
+
+    `.tools/` is what the README suggests on platforms with no package for
+    Tectonic. Checked relative to both the working directory and the source
+    tree, so running the tool from another directory still finds it.
+    """
+
+    return [Path.cwd(), Path(__file__).resolve().parents[2]]
+
+
 def find_tectonic(explicit: str | None = None) -> str:
     """Locate the Tectonic binary, or explain how to get one."""
 
@@ -35,8 +46,11 @@ def find_tectonic(explicit: str | None = None) -> str:
         explicit,
         os.environ.get(TECTONIC_ENV_VAR),
         shutil.which("tectonic"),
-        str(Path.cwd() / ".tools" / "tectonic.exe"),
-        str(Path.cwd() / ".tools" / "tectonic"),
+        *[
+            str(root / ".tools" / name)
+            for root in _local_roots()
+            for name in ("tectonic.exe", "tectonic")
+        ],
     ]
     for candidate in candidates:
         if candidate and Path(candidate).exists():
