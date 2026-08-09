@@ -3,7 +3,23 @@ from __future__ import annotations
 import pytest
 
 from resume_tailor.jd_parser import ParsedJobDescription
+from resume_tailor.llm import OpenAIClient
 from resume_tailor.models import ResumeStore
+
+
+@pytest.fixture(autouse=True)
+def no_live_llm_calls(monkeypatch):
+    """Hard stop on any test that would reach a real model.
+
+    Mocking at each call site is easy to forget; this makes forgetting fail.
+    """
+
+    def refuse(self):
+        raise AssertionError(
+            "a test tried to construct a real LLM client. Mock the LLMClient protocol."
+        )
+
+    monkeypatch.setattr(OpenAIClient, "_ensure_client", refuse)
 
 STORE_DATA = {
     "profile": {

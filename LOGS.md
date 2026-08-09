@@ -276,3 +276,36 @@ otherwise, which silently dropped "Gas Valve Calibration System" from the RHV
 entry. That entry no longer sets `organization`, with a comment saying why. Also
 removed a `subtitle` value that `build_context` computed but the template never
 used.
+
+## Phase 7 — Tests
+
+Files: `tests/test_store.py`, plus an autouse fixture in `tests/conftest.py`.
+76 tests, no network, about 4 seconds.
+
+Most coverage was written alongside each phase rather than bolted on at the end.
+This phase added the store suite and closed the one hole in the "no live LLM
+calls" rule.
+
+**The no-live-calls rule is enforced, not just followed.** An autouse fixture
+replaces `OpenAIClient._ensure_client` with something that raises. Remembering to
+mock at every call site is exactly the kind of discipline that lapses; this makes
+a lapse fail the suite instead of quietly hitting the network and your API
+budget.
+
+**Store tests** cover each failure mode with its message: missing file, empty
+file, a non-mapping document, invalid YAML (asserting the line and column are
+reported), a missing required field, a typo'd field name, an empty bullet, a
+duplicate id, and a bad `section` value. Several assert on the *entry name*
+appearing in the message, since that is the whole point of the error rewriting.
+Also covered: slug generation, whitespace normalization that leaves wording
+alone, and `present` rendering as "Present".
+
+One test guards the repo itself: the shipped `projects.yaml` must load, and
+every entry's `bullets` must be empty. If real bullets ever get committed to the
+placeholder store, that test fails and says so.
+
+Against the spec's checklist: schema validation with clear errors, the escaper
+including `C++` and `C#`, deterministic ranking restricted to input bullets,
+rejection and retry when a mocked model leaves the candidate set, and an
+end-to-end run producing a real PDF. All present, plus CLI behavior and Tectonic
+error parsing.
