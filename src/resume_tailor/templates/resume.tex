@@ -1,0 +1,123 @@
+% Single-column resume template.
+%
+% Jinja uses the LaTeX-friendly delimiter set here, so braces and backslashes
+% still mean what they mean in LaTeX. Two things to know before editing:
+%   - A line starting with two percent signs is a Jinja line statement, so
+%     comments in this file use a single percent sign.
+%   - The delimiters are live even inside comments, which is why this one
+%     describes them instead of showing them.
+%
+% Injected values are escaped automatically by the environment's finalize hook;
+% there is no need to remember an escape filter.
+
+\documentclass[letterpaper,10pt]{article}
+
+\usepackage[top=0.5in,bottom=0.5in,left=0.55in,right=0.55in]{geometry}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{lmodern}
+
+\pagestyle{empty}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+\raggedbottom
+\raggedright
+
+% Section heading: bold, with a rule underneath.
+\titleformat{\section}
+  {\normalsize\bfseries}
+  {}{0em}{}
+  [\vspace{-7pt}\rule{\linewidth}{0.6pt}\vspace{-4pt}]
+\titlespacing*{\section}{0pt}{9pt}{4pt}
+
+% An entry header: organization on the left, location on the right, then the
+% role and dates in italics on the next line.
+\newcommand{\entryhead}[2]{\textbf{#1}\hfill #2\par}
+\newcommand{\entrysub}[2]{\textit{#1}\hfill \textit{#2}\par\vspace{1pt}}
+
+\newlist{bullets}{itemize}{1}
+\setlist[bullets]{
+  leftmargin=1.3em,
+  labelsep=0.45em,
+  itemsep=0.5pt,
+  parsep=0pt,
+  topsep=2pt,
+  partopsep=0pt,
+  label=\textbullet
+}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries \VAR{profile.name}}\\[3pt]
+  \small
+  \BLOCK{if profile.phone}\VAR{profile.phone}\BLOCK{endif}
+  \BLOCK{if profile.phone and (profile.email or profile.links)} $|$ \BLOCK{endif}
+  \BLOCK{if profile.email}\href{mailto:\VAR{profile.email}}{\VAR{profile.email}}\BLOCK{endif}
+  \BLOCK{for link in profile.links}
+   $|$ \href{https://\VAR{link}}{\VAR{link}}
+  \BLOCK{endfor}
+\end{center}
+
+\BLOCK{if education}
+\section{Education}
+\BLOCK{for school in education}
+\entryhead{\VAR{school.school}}{\VAR{school.location}}
+\entrysub{\VAR{school.degree}}{\VAR{school.graduation}}
+\BLOCK{if school.coursework}
+\begin{bullets}
+  \item Relevant Coursework: \VAR{school.coursework|join(', ')}
+\end{bullets}
+\BLOCK{endif}
+\BLOCK{endfor}
+\BLOCK{endif}
+
+\BLOCK{if skills}
+\section{Technical Skills}
+\begin{bullets}
+\BLOCK{for group in skills}
+  \item \textbf{\VAR{group.category}:} \VAR{group['items']|join(', ')}
+\BLOCK{endfor}
+\end{bullets}
+\BLOCK{endif}
+
+\BLOCK{if experience}
+\section{Experience}
+\BLOCK{for entry in experience}
+\entryhead{\VAR{entry.title}}{\VAR{entry.location}}
+\entrysub{\VAR{entry.role}}{\VAR{entry.dates}}
+\begin{bullets}
+\BLOCK{for bullet in entry.bullets}
+  \item \VAR{bullet}
+\BLOCK{endfor}
+\end{bullets}
+\BLOCK{endfor}
+\BLOCK{endif}
+
+\BLOCK{if projects}
+\section{Projects}
+\BLOCK{for entry in projects}
+\BLOCK{if entry.technologies}
+\entryhead{\VAR{entry.title} $|$ \textit{\VAR{entry.technologies}}}{\VAR{entry.dates}}
+\BLOCK{else}
+\entryhead{\VAR{entry.title}}{\VAR{entry.dates}}
+\BLOCK{endif}
+\begin{bullets}
+\BLOCK{for bullet in entry.bullets}
+  \item \VAR{bullet}
+\BLOCK{endfor}
+\end{bullets}
+\BLOCK{endfor}
+\BLOCK{endif}
+
+\BLOCK{if leadership}
+\section{Leadership \& Involvement}
+\begin{bullets}
+\BLOCK{for item in leadership}
+  \item \VAR{item}
+\BLOCK{endfor}
+\end{bullets}
+\BLOCK{endif}
+
+\end{document}

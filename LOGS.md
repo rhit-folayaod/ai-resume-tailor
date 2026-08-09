@@ -157,3 +157,47 @@ boundaries, ranking determinism, a hardware posting reordering the ranking,
 budget spread, per-project caps, and four separate attempts by a mocked model to
 escape the candidate set (unknown index, unknown project, duplicate, and a
 response carrying invented bullet text).
+
+## Phase 4 — LaTeX template
+
+Files: `src/resume_tailor/latex.py`,
+`src/resume_tailor/templates/resume.tex`, `tests/test_latex.py`.
+
+**Delimiters.** The conventional LaTeX-friendly Jinja set: `\VAR{}` for values,
+`\BLOCK{}` for statements, `\#{}` for comments, `%%` and `%#` for the line
+forms, `trim_blocks` and `lstrip_blocks` on, autoescape off. Braces and
+backslashes then belong to LaTeX alone.
+
+Worth recording because it cost a test run: those delimiters are live inside
+LaTeX comments too. A header comment in the template that *described* the syntax
+by showing `\VAR{}` was parsed as an empty expression and failed to compile. The
+comment now describes the delimiters without writing them, and says why.
+
+**Escaping is not a filter, it is the `finalize` hook.** Every value that
+reaches the template is escaped whether or not the template author asked for it.
+A filter would work right up until someone adds a field and forgets `|e`, and
+that bug surfaces as a Tectonic error several steps downstream. A `Raw` string
+subclass exists as the deliberate opt-out; nothing currently uses it.
+
+The escaper is one regex pass over an alternation of the special characters,
+which is what keeps it correct: escaping character by character in sequence
+turns `&` into `\&` and then the backslash rule turns that into
+`\textbackslash{}&`. `C++` passes through unchanged (`+` is ordinary in text
+mode) and `C#` becomes `C\#`; both are asserted directly, along with a realistic
+bullet containing `%`, `&`, `$`, `#`, `+`, and `_` at once.
+
+**The template** follows the layout of the existing resume: centered name and
+contact line, then Education, Technical Skills, Experience, Projects, and
+Leadership. Single column, 10pt, roughly half-inch margins, bold section
+headings with a rule under them, organization and location on one line with role
+and dates italicized beneath. No graphics, no multi-column tricks, nothing an
+ATS parser has to guess at. Only `geometry`, `titlesec`, `enumitem`,
+`hyperref`, and `lmodern` are used, which keeps what Tectonic has to fetch
+small.
+
+One addition worth flagging: `reorder_skills` floats skills the posting asked
+for to the front of their line. It is off by default and it only reorders —
+a skill the posting wants but you do not have cannot appear, because it is not
+in your store.
+
+Still to verify: how it actually looks. That needs Tectonic, which is Phase 5.
