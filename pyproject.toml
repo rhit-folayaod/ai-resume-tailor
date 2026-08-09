@@ -1,0 +1,33 @@
+[project]
+name = "resume-tailor"
+version = "0.1.0"
+description = "Tailors a resume to a job description by selecting and ranking pre-written content. Never generates new claims."
+readme = "README.md"
+authors = [
+    { name = "rhit-folayaod", email = "folayaod@rose-hulman.edu" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1",
+    "jinja2>=3.1",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.40"]
+
+[project.scripts]
+resume-tailor = "resume_tailor.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

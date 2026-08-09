@@ -1,0 +1,235 @@
+# Content store for resume-tailor.
+#
+# This is the ONLY place resume content comes from. The tool selects, ranks, and
+# reorders what is written here; it never rewrites a bullet or invents a new one.
+# If a claim is not in this file, it cannot appear in a generated resume.
+#
+# Bullets are shipped empty on purpose. Write each one yourself, in your own
+# words, as a complete accomplishment statement that could stand alone on a
+# resume. `technologies`, `domains`, and `keywords` are matching metadata: they
+# are what the ranker scores against, and they are never printed verbatim except
+# for `technologies` on project entries.
+#
+# Sanitize this file before making the repo public (see README).
+
+profile:
+  name: David Oluwatimilehin "Timi" Folayan
+  phone: ""            # fill in locally; left blank so it is not committed
+  email: folayaod@rose-hulman.edu
+  links:
+    - linkedin.com/in/timifolayan
+
+education:
+  - school: Rose-Hulman Institute of Technology
+    location: Terre Haute, IN
+    degree: Bachelor of Science in Software Engineering; Minor in Geography
+    graduation: Expected 2027
+    coursework:
+      - Object-Oriented Development
+      - Operating Systems
+      - Web Development
+      - Data Structures & Algorithms
+      - Digital Systems
+      - Databases
+      - Formal Methods
+      - Practical Security
+
+skills:
+  - category: Languages & Technologies
+    items:
+      - Java
+      - Python
+      - SQL
+      - C#
+      - JavaScript
+      - HTML/CSS
+      - C
+      - C++
+      - React
+      - R
+      - Matlab
+  - category: Tools & Platforms
+    items:
+      - Git
+      - VS Code
+      - Eclipse IDE
+      - IntelliJ
+      - Docker
+      - Kubernetes
+      - FastAPI
+      - PostgreSQL
+      - MLflow
+      - scikit-learn
+      - Firebase
+      - Unit Testing
+      - Microsoft SQL Server
+
+projects:
+  - id: emerson-ni
+    name: Sales Development Engineering Internship
+    organization: Emerson-NI (National Instruments)
+    role: Sales Development Engineering Intern
+    location: Austin, TX
+    section: experience
+    dates:
+      start: Summer 2026
+      end: Summer 2026
+    technologies: []
+    domains:
+      - customer-facing
+      - hardware
+      - sales-engineering
+    keywords: []
+    bullets: []
+
+  - id: rhv-gas-valve
+    name: RHV - Gas Valve Calibration System
+    organization: RHV
+    role: Software Engineer Intern
+    location: Terre Haute, IN
+    section: experience
+    dates:
+      start: Summer 2025
+      end: Summer 2025
+    technologies:
+      - C#
+      - WinForms
+      - Modbus TCP/IP
+      - Serial communication
+      - PLCs
+    domains:
+      - hardware
+      - embedded
+      - test-and-measurement
+      - backend
+    keywords:
+      - multithreading
+      - real-time
+      - industrial automation
+    bullets: []
+
+  - id: jetpack-daq-demo
+    name: Jetpack DAQ Demo
+    organization: Emerson-NI (National Instruments)
+    role: internal project
+    location: Austin, TX
+    section: project
+    dates:
+      start: Summer 2026
+      end: Summer 2026
+    technologies: []      # fill in: what you actually built it with
+    domains:
+      - hardware
+      - data
+      - customer-facing
+    keywords: []
+    bullets: []
+
+  - id: rose-hulman-ta
+    name: Formal Methods Teaching Assistant
+    organization: Rose-Hulman Institute of Technology
+    role: Teaching Assistant
+    location: Terre Haute, IN
+    section: experience
+    dates:
+      start: Spring 2026
+      end: Spring 2026
+    technologies: []
+    domains:
+      - teaching
+      - formal-methods
+    keywords:
+      - logic
+      - specifications
+      - program correctness
+    bullets: []
+
+  - id: ask-rose
+    name: Ask Rose Homework Hotline
+    organization: Ask Rose
+    role: Learning Advisor
+    location: Terre Haute, IN
+    section: experience
+    dates:
+      start: Winter 2024
+      end: present
+    technologies: []
+    domains:
+      - teaching
+      - customer-facing
+    keywords:
+      - communication
+      - tutoring
+    bullets: []
+
+  - id: nba-player-predictor
+    name: NBA Player Predictor
+    role: personal project
+    section: project
+    dates:
+      start: "2025"
+      end: "2025"
+    technologies:
+      - Python
+      - scikit-learn
+      - FastAPI
+      - PostgreSQL
+      - MLflow
+      - Docker
+      - Kubernetes
+    domains:
+      - data
+      - machine-learning
+      - backend
+      - devops
+    keywords:
+      - CI/CD
+      - GitHub Actions
+      - GKE
+      - model registry
+    bullets: []
+
+  - id: settlers-of-catan
+    name: Settlers of Catan
+    role: course project
+    section: project
+    dates:
+      start: "2025"
+      end: "2025"
+    technologies:
+      - Java
+      - Maven
+      - VS Code
+    domains:
+      - backend
+      - software-design
+    keywords:
+      - internationalization
+      - build systems
+    bullets: []
+
+  - id: lost-and-found-db
+    name: Lost and Found Database
+    role: course project
+    section: project
+    dates:
+      start: "2024"
+      end: "2024"
+    technologies:
+      - SQL
+      - Java
+      - Eclipse IDE
+      - Microsoft SQL Server
+    domains:
+      - data
+      - backend
+    keywords:
+      - relational modeling
+      - OOP
+    bullets: []
+
+leadership:
+  - Vice President, African Student Union - 2024-Present
+  - Public Relations Chair, National Society of Black Engineers - 2024-Present
+  - Member, Linux Users Group & Computer Security Club - 2023-Present
+  - Member, ColorStack - 2023-Present
