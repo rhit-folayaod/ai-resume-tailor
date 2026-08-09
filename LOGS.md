@@ -387,3 +387,64 @@ before. The existing CLI tests passed unchanged, which is the point. FastAPI and
 uvicorn are imported inside `serve` so the command line does not pay for them.
 
 Not built yet: the actual page. `webui/index.html` is a placeholder.
+
+## Phase 10 — Browser interface
+
+Files: `src/resume_tailor/webui/{index.html,styles.css,app.js}`, plus static
+asset tests. 98 tests.
+
+**No build step, by choice.** Plain HTML, hand-written CSS, and DOM JavaScript.
+`uv run resume-tailor serve` is the only command; there is no npm install to
+keep in sync, no bundler to break, and no CDN, so the interface keeps working
+and looking right offline. The CSS defines its own small design system with
+variables and follows `prefers-color-scheme`, so it is dark or light to match
+the system.
+
+**Tailor tab.** Three posting sources behind a segmented control: URL with a
+Fetch button, a drop zone, and a paste box. Files can be dropped anywhere on the
+page — the drop handler switches to the file tab first, so the result is not
+hidden behind whichever mode happened to be showing. Whatever comes back is
+shown with its character count and a collapsible view of the extracted text,
+because silently ranking against a page of navigation junk is the failure this
+whole design guards against.
+
+Results show each entry with its score, each bullet with the requirements it
+matched, and what was left out with the reason, mirroring `--dry-run`. Build PDF
+compiles and previews inline in an iframe, with download links for the PDF and
+the generated `.tex`.
+
+**Content tab.** A full editor for the store: profile, skill groups, education,
+every entry with dates, tags and bullets, and leadership lines. Skills and tags
+are chips added with Enter and removed with ×; bullets can be added, reordered,
+and deleted. Tag sections are labelled with whether they print — technologies do,
+domains and keywords do not — since that distinction is invisible otherwise and
+determines whether editing them does anything you can see.
+
+Two implementation notes. The editor keeps the whole store in one object and
+re-renders only on structural changes; plain typing mutates state directly, so
+focus and cursor position survive. And empty bullets are dropped on save rather
+than rejected, because a blank textarea is a normal thing to have mid-edit but
+not a valid store — being handed a validation error for a box you were about to
+type in would be obnoxious.
+
+Unsaved changes show a marker, Revert restores the last saved state, and closing
+the tab with pending edits warns.
+
+**Status pills** in the header report whether a model is configured and whether
+Tectonic was found, so a missing key is visible before it costs a failed run.
+
+Verified live: server starts, page and both assets serve with correct content
+types, `/api/health` reports the resolved Tectonic path, and `/api/store` returns
+all eight entries. Node's parser checks the JavaScript for syntax errors, and
+the API is covered by the test suite.
+
+## Status
+
+Ten phases done. 98 tests pass with no network access. Both entry points work:
+`resume-tailor serve` for the browser, `resume-tailor --jd ...` for the command
+line.
+
+What is left is content, not code: `projects.yaml` still ships with empty
+`bullets`. The Content tab is now the fastest way to fill them in. Visual
+iteration on the resume template is the other open item — the layout follows the
+existing resume, but it was designed against fixture data.

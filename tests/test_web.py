@@ -174,3 +174,11 @@ def test_serves_the_page(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+    assert "resume-tailor" in response.text
+
+
+def test_serves_the_static_assets_the_page_asks_for(client):
+    page = client.get("/").text
+    for asset in ("/static/styles.css", "/static/app.js"):
+        assert asset in page
+        assert client.get(asset).status_code == 200

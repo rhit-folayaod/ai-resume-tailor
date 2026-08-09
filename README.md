@@ -9,7 +9,8 @@ bullets belong on this particular application and in what order, fills a LaTeX
 template with them, and compiles it.
 
 ```
-uv run resume-tailor --jd posting.txt --out resume.pdf
+uv run resume-tailor serve                              # browser interface
+uv run resume-tailor --jd posting.txt --out resume.pdf  # command line
 ```
 
 ## The no-fabrication guarantee
@@ -108,7 +109,38 @@ $env:RESUME_TAILOR_MODEL = "gpt-4o-mini"   # optional, this is the default
 $env:OPENAI_BASE_URL = "http://localhost:11434/v1"   # optional: Ollama, OpenRouter, etc.
 ```
 
-## Usage
+## The browser interface
+
+```
+uv run resume-tailor serve
+```
+
+Serves on `http://127.0.0.1:8765` and opens a browser. Two tabs:
+
+**Tailor.** Give it a posting three ways — paste a URL and hit Fetch, drop a PDF
+anywhere on the page, or paste the text. Set the bullet budget, and it shows
+every entry it picked with the score behind the pick, each chosen bullet with the
+requirements it matched, and what was left out and why. Then Build PDF compiles
+and previews inline, with download links for the PDF and the generated `.tex`.
+
+URL fetching is best-effort. LinkedIn, Workday, and Greenhouse block automated
+requests or render postings with JavaScript, and when that happens the page says
+so and points you at the PDF or paste route rather than silently ranking against
+half a page of navigation text.
+
+**Content.** A full editor for `projects.yaml`: profile, skill groups, education,
+every experience and project entry with its bullets, and leadership lines. Skills
+and tags are chips you add with Enter and remove with the ×; bullets can be
+added, reordered, and deleted. Save validates before writing and rewrites the
+file atomically, keeping the previous version as `projects.yaml.bak`.
+
+Saving from the UI does not preserve comments you have hand-written in the YAML.
+The header block is regenerated; inline notes are not.
+
+Nothing about the UI changes the guarantee above. `PUT /api/store` is the only
+way text enters the store, and that is you typing it.
+
+## Command line usage
 
 `uv sync` installs the `resume-tailor` command into the project environment; run
 it with `uv run resume-tailor`, or activate `.venv` and drop the prefix.
@@ -145,13 +177,17 @@ cat posting.txt | uv run resume-tailor --out resume.pdf
 | `--model NAME` | Override the model. |
 | `--tectonic PATH` | Override the Tectonic binary. |
 
+`resume-tailor serve` takes `--projects`, `--host`, `--port`, `--model`,
+`--tectonic`, and `--no-open`.
+
 ## Maintaining projects.yaml
 
 This is the part that determines whether the output is any good. The tool can
 only choose among sentences you have already written, so a thin store produces a
 thin resume no matter how good the ranking is.
 
-Each entry looks like this:
+The Content tab of `resume-tailor serve` edits all of this, which is usually
+easier than editing YAML by hand. Each entry looks like this:
 
 ```yaml
 - id: rhv-gas-valve
@@ -224,6 +260,10 @@ compile error.
 uv run pytest
 ```
 
-76 tests, no network access. An autouse fixture makes any test that tries to
+98 tests, no network access. An autouse fixture makes any test that tries to
 construct a real LLM client fail, so the suite cannot start making live calls by
 accident. The end-to-end tests skip themselves if Tectonic is not installed.
+
+The browser UI is plain HTML, CSS, and DOM JavaScript under
+`src/resume_tailor/webui/` — no build step, no bundler, no CDN. Edit the files
+and reload the page.

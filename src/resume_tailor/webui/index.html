@@ -2,9 +2,159 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>resume-tailor</title>
+    <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <p>The interface is not built yet. The API is available under /api.</p>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">RT</span>
+        <div>
+          <h1>resume-tailor</h1>
+          <p class="brand-sub">Selects bullets you wrote. Never writes new ones.</p>
+        </div>
+      </div>
+      <div class="status" id="status"></div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="tailor" role="tab">Tailor</button>
+      <button class="tab" data-tab="content" role="tab">Content</button>
+    </nav>
+
+    <main>
+      <section class="panel is-active" id="panel-tailor">
+        <div class="layout">
+          <div class="column">
+            <section class="card">
+              <h2>Job posting</h2>
+              <div class="segmented" id="source-modes">
+                <button class="segment is-active" data-mode="url">URL</button>
+                <button class="segment" data-mode="file">PDF or file</button>
+                <button class="segment" data-mode="paste">Paste</button>
+              </div>
+
+              <div class="source" id="source-url">
+                <div class="row">
+                  <input
+                    id="url-input"
+                    type="url"
+                    placeholder="https://company.com/careers/backend-intern"
+                    autocomplete="off"
+                  />
+                  <button class="button" id="fetch-url">Fetch</button>
+                </div>
+                <p class="hint">
+                  LinkedIn, Workday, and Greenhouse block automated fetches. If one refuses,
+                  save the page as a PDF and drop it here instead.
+                </p>
+              </div>
+
+              <div class="source is-hidden" id="source-file">
+                <label class="dropzone" id="dropzone" for="file-input">
+                  <strong>Drop a PDF here</strong>
+                  <span>or click to choose a file &mdash; .pdf, .txt, .md, .html</span>
+                  <input id="file-input" type="file" accept=".pdf,.txt,.md,.html,.htm" hidden />
+                </label>
+              </div>
+
+              <div class="source is-hidden" id="source-paste">
+                <textarea
+                  id="paste-input"
+                  rows="10"
+                  placeholder="Paste the full posting here."
+                ></textarea>
+              </div>
+
+              <div class="posting is-hidden" id="posting">
+                <div class="posting-head">
+                  <span id="posting-source"></span>
+                  <button class="link" id="posting-toggle">show text</button>
+                </div>
+                <pre class="posting-text is-hidden" id="posting-text"></pre>
+              </div>
+            </section>
+
+            <section class="card">
+              <h2>Budget</h2>
+              <div class="fields">
+                <label>
+                  <span>Total bullets</span>
+                  <input id="max-bullets" type="number" min="1" max="60" value="12" />
+                </label>
+                <label>
+                  <span>Entries</span>
+                  <input id="max-projects" type="number" min="1" max="30" value="6" />
+                </label>
+                <label>
+                  <span>Bullets per entry</span>
+                  <input id="max-per-project" type="number" min="1" max="20" value="3" />
+                </label>
+              </div>
+              <label class="check">
+                <input id="llm-rank" type="checkbox" />
+                <span>
+                  <strong>Let the model reorder the shortlist</strong>
+                  It can only reorder what scoring already picked; it cannot add anything.
+                </span>
+              </label>
+              <label class="check">
+                <input id="reorder-skills" type="checkbox" />
+                <span>
+                  <strong>Float matching skills to the front of their line</strong>
+                  Reorders only. A skill you do not have never appears.
+                </span>
+              </label>
+              <button class="button button-primary" id="tailor-button" disabled>
+                Tailor resume
+              </button>
+            </section>
+          </div>
+
+          <div class="column">
+            <section class="card is-hidden" id="results">
+              <h2>Selection</h2>
+              <div id="job-summary"></div>
+              <div id="selection"></div>
+              <div class="actions">
+                <button class="button button-primary" id="build-pdf">Build PDF</button>
+                <a class="button is-hidden" id="download-pdf" download="resume.pdf">Download</a>
+                <a class="button is-hidden" id="download-tex" download="resume.tex">Get .tex</a>
+              </div>
+              <iframe class="preview is-hidden" id="preview" title="Resume preview"></iframe>
+            </section>
+
+            <section class="card empty" id="results-empty">
+              <h2>Nothing selected yet</h2>
+              <p>
+                Give it a posting and it will show every entry it picked, the score behind
+                the pick, and which of your bullets matched which requirement &mdash; before
+                anything is compiled.
+              </p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-content">
+        <div class="editor-bar">
+          <div>
+            <h2>Your content</h2>
+            <p class="hint" id="store-path"></p>
+          </div>
+          <div class="editor-actions">
+            <span class="dirty is-hidden" id="dirty">unsaved changes</span>
+            <button class="button" id="revert-button">Revert</button>
+            <button class="button button-primary" id="save-button">Save</button>
+          </div>
+        </div>
+        <div id="editor"></div>
+      </section>
+    </main>
+
+    <div class="toasts" id="toasts"></div>
+
+    <script src="/static/app.js"></script>
   </body>
 </html>
