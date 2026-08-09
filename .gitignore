@@ -17,4 +17,7 @@ build/
 out/
 *.pdf
 
+# Locally downloaded Tectonic binary
+.tools/
+
 .env

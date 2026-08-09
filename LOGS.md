@@ -201,3 +201,37 @@ a skill the posting wants but you do not have cannot appear, because it is not
 in your store.
 
 Still to verify: how it actually looks. That needs Tectonic, which is Phase 5.
+
+## Phase 5 — Compilation
+
+Files: `src/resume_tailor/compile.py`, `tests/test_compile.py`.
+
+**Getting Tectonic.** It was not installed, and `winget` has no `tectonic`
+package on this machine — the install docs list Homebrew, MacPorts, the Linux
+shell script, conda, and direct download, and the Windows path in practice is
+the direct download. The current release is 0.17.0, and the
+`x86_64-pc-windows-msvc` build now sits in a gitignored `.tools/` next to the
+repo. `find_tectonic` looks in `RESUME_TAILOR_TECTONIC`, then `PATH`, then
+`.tools/`, and otherwise raises a message that says how to install it rather
+than an OSError.
+
+**Cleanup is structural.** Compilation happens inside a
+`TemporaryDirectory`; the `.tex` goes in, the PDF bytes come out, and the
+directory is deleted on the way out regardless of success or failure. There is
+no cleanup path that can be skipped by an early return, and no aux or log file
+can appear next to your resume. A test asserts the working directory is empty
+afterwards. `--untrusted` is passed, which disables shell-escape.
+
+**Error surfacing.** `_summarize` pulls the real error lines out of the output
+and, when TeX reports `l.<n>`, prints that line of the *generated* `.tex`
+alongside it — which is what you need, since the bug is usually in the template
+or the escaper rather than in anything you wrote. Tectonic's closing "the TeX
+engine had an unrecoverable error" summary is dropped as noise because the
+specific error above it is the useful one. A missing package gets its own hint,
+since first-run failures are usually the package fetch. If nothing parses, it
+falls back to the last few non-empty lines instead of dumping the whole log.
+
+Verified end to end: the Phase 4 template compiles to a real PDF (first run
+took ~50s while Tectonic downloaded packages; cached runs are fast), and a
+deliberately broken document produces "Undefined control sequence" with the
+offending line rather than a wall of log.
