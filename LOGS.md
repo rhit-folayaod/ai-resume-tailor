@@ -105,3 +105,55 @@ real bullets get picked.
 
 Tests cover the happy path, fenced JSON, dedupe, retry-with-error-in-prompt,
 give-up-after-two, extra keys rejected, and empty input.
+
+## Phase 3 — Matching and ranking engine
+
+Files: `src/resume_tailor/matching.py`, `src/resume_tailor/ranking.py`,
+`tests/conftest.py`, `tests/test_matching.py`, `tests/test_ranking.py`.
+
+**Matching is its own module** because it is the part most likely to be subtly
+wrong. Term boundaries treat `+`, `#`, and `.` as part of a term, so "C" does not
+match inside "C++" or "C#", and "R" does not match inside "React" — the exact
+failure that would put the wrong project at the top of a resume. A small,
+explicit alias table (`js`/`javascript`, `k8s`/`kubernetes`, `postgres`/
+`postgresql`, and similar) handles the common spellings. It is deliberately not
+fuzzy: a score you cannot explain is a score you cannot trust when deciding what
+to send to an employer.
+
+**Scoring is deterministic and takes no client.** `rank_projects` is a pure
+function of the store, the parsed JD, and a `ScoringWeights` dataclass. Evidence
+is weighted by how strong a claim it is: a required skill listed as a project's
+technology (3.0) beats the same word appearing in tags (1.5) which beats it
+appearing in prose (1.0), since prose mentions can be incidental. Bullets are
+scored separately within each project so a project with eight bullets
+contributes only its two most relevant. Small nudges for quantified bullets and
+current roles. Every sort has an explicit tiebreak on the order written in
+`projects.yaml`, so identical inputs always produce an identical resume.
+
+**Budget is a parameter**, not a constant: `SelectionBudget(max_bullets,
+max_projects, max_bullets_per_project, min_project_score)`. Allocation is
+round-robin across ranked projects rather than depth-first, so the top project
+cannot eat the entire budget and leave everything else invisible.
+
+**The no-fabrication guarantee is enforced in three layers**, which is the part
+worth reading the code for:
+
+1. The candidate set is built from `projects.yaml` and frozen *before* the model
+   is contacted.
+2. The rerank response schema is `{project_id, bullet_index}` with extra keys
+   forbidden — it carries no text field at all. Bullet text is looked up from
+   the store after the call, so text the model emits is not merely rejected, it
+   is never read. A model that tries to "improve" a bullet gets a validation
+   error.
+3. Every reference is checked against the frozen set via the `extra_validation`
+   hook from Phase 2, which re-prompts once with the specific bad id and then
+   fails loudly.
+
+Per your call, the rerank is opt-in; deterministic scoring is the default, so
+the tool works with no API key at all.
+
+Tests: 32 passing, no network. They cover `C`/`C++`/`C#`/`R`/`React`
+boundaries, ranking determinism, a hardware posting reordering the ranking,
+budget spread, per-project caps, and four separate attempts by a mocked model to
+escape the candidate set (unknown index, unknown project, duplicate, and a
+response carrying invented bullet text).

@@ -1,4 +1,5 @@
 import pytest
+from conftest import ScriptedClient
 
 from resume_tailor.errors import LLMError, ResumeTailorError
 from resume_tailor.jd_parser import ParsedJobDescription, parse_job_description
@@ -8,18 +9,6 @@ Software Engineer Intern, Backend Platform.
 We are looking for someone with Python and SQL experience. Familiarity with
 Docker is a plus. You will work on internal services.
 """.strip()
-
-
-class ScriptedClient:
-    """Returns canned responses in order and records the prompts it saw."""
-
-    def __init__(self, *responses: str) -> None:
-        self.responses = list(responses)
-        self.prompts: list[tuple[str, str]] = []
-
-    def complete_json(self, system: str, user: str) -> str:
-        self.prompts.append((system, user))
-        return self.responses.pop(0)
 
 
 def test_parses_valid_response():
