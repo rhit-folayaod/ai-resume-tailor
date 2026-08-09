@@ -57,7 +57,51 @@ All `bullets` lists are empty, as specified — that content gets written by han
 since the template needs real values to render against. `phone` is left blank
 so it is not committed.
 
-Open question for review: `domains` and `keywords` on the seeded entries were
-inferred from the existing resume text as matching metadata. They never print
-(except `technologies` on project entries), but they do steer ranking, so they
-are worth a look.
+Reviewed: `domains` and `keywords` were initially inferred from the existing
+resume text, and have been emptied at your request — nothing in the store is
+inferred on your behalf. `technologies` stays populated where the resume already
+lists it verbatim. An entry with no `domains` still matches on `technologies`.
+
+## Phase 2 — Job description parser
+
+Files: `src/resume_tailor/llm.py`, `src/resume_tailor/jd_parser.py`,
+`tests/test_jd_parser.py`.
+
+**The LLM boundary is one method.** `LLMClient` is a `Protocol` with a single
+`complete_json(system, user) -> str`. Keeping it that narrow is what makes the
+no-fabrication argument checkable: there is exactly one place model text enters
+the process, and every caller validates before using the result. Tests mock this
+protocol with a scripted fake, so the suite never touches the network.
+
+`OpenAIClient` is the real implementation. It targets OpenAI-compatible chat
+completions, so `OPENAI_BASE_URL` can point at Ollama, OpenRouter, or Groq
+instead. Model comes from `RESUME_TAILOR_MODEL` (default `gpt-4o-mini`),
+temperature is 0, and `response_format` is forced to `json_object`. The `openai`
+import is lazy so importing the package costs nothing and a missing key produces
+an instruction rather than a traceback.
+
+**Validation with one retry** lives in `request_validated_json`, shared with
+Phase 3 rather than written twice. It strips code fences, parses JSON, validates
+against a Pydantic model, and on failure re-prompts once with the original
+request plus the bad response and the specific error. Two failures raise
+`LLMError` carrying the last error.
+
+It also takes an optional `extra_validation` callback that runs after schema
+validation and can raise `ValueError` to trigger the same retry path. That is
+the hook Phase 3 uses to enforce "every id you returned already existed" — a
+constraint a schema cannot express, wired into the retry loop rather than
+bolted on after.
+
+**The extraction prompt** is constrained to extraction: copy skills as written,
+never infer related technologies ("Python" must not become "Django"), classify
+required vs preferred by how the posting frames it, and emit `"unspecified"`
+rather than guessing. `ParsedJobDescription` forbids extra keys, drops blanks,
+and dedupes case-insensitively.
+
+Worth being explicit about: nothing the parser returns is ever printed on the
+resume. The parse only produces scoring terms for content that already exists in
+`projects.yaml`, so even a badly hallucinated parse can only change which of your
+real bullets get picked.
+
+Tests cover the happy path, fenced JSON, dedupe, retry-with-error-in-prompt,
+give-up-after-two, extra keys rejected, and empty input.

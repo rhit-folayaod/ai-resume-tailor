@@ -10,6 +10,11 @@
 # are what the ranker scores against, and they are never printed verbatim except
 # for `technologies` on project entries.
 #
+# `domains` and `keywords` are left empty on purpose: nothing here is inferred on
+# your behalf. Fill them in as you go (e.g. domains: backend, hardware, data,
+# customer-facing) — the ranker matches against them, so empty means an entry
+# only matches on its `technologies`.
+#
 # Sanitize this file before making the repo public (see README).
 
 profile:
@@ -75,10 +80,7 @@ projects:
       start: Summer 2026
       end: Summer 2026
     technologies: []
-    domains:
-      - customer-facing
-      - hardware
-      - sales-engineering
+    domains: []
     keywords: []
     bullets: []
 
@@ -97,15 +99,8 @@ projects:
       - Modbus TCP/IP
       - Serial communication
       - PLCs
-    domains:
-      - hardware
-      - embedded
-      - test-and-measurement
-      - backend
-    keywords:
-      - multithreading
-      - real-time
-      - industrial automation
+    domains: []
+    keywords: []
     bullets: []
 
   - id: jetpack-daq-demo
@@ -118,10 +113,7 @@ projects:
       start: Summer 2026
       end: Summer 2026
     technologies: []      # fill in: what you actually built it with
-    domains:
-      - hardware
-      - data
-      - customer-facing
+    domains: []
     keywords: []
     bullets: []
 
@@ -135,13 +127,8 @@ projects:
       start: Spring 2026
       end: Spring 2026
     technologies: []
-    domains:
-      - teaching
-      - formal-methods
-    keywords:
-      - logic
-      - specifications
-      - program correctness
+    domains: []
+    keywords: []
     bullets: []
 
   - id: ask-rose
@@ -154,12 +141,8 @@ projects:
       start: Winter 2024
       end: present
     technologies: []
-    domains:
-      - teaching
-      - customer-facing
-    keywords:
-      - communication
-      - tutoring
+    domains: []
+    keywords: []
     bullets: []
 
   - id: nba-player-predictor
@@ -177,16 +160,8 @@ projects:
       - MLflow
       - Docker
       - Kubernetes
-    domains:
-      - data
-      - machine-learning
-      - backend
-      - devops
-    keywords:
-      - CI/CD
-      - GitHub Actions
-      - GKE
-      - model registry
+    domains: []
+    keywords: []
     bullets: []
 
   - id: settlers-of-catan
@@ -200,12 +175,8 @@ projects:
       - Java
       - Maven
       - VS Code
-    domains:
-      - backend
-      - software-design
-    keywords:
-      - internationalization
-      - build systems
+    domains: []
+    keywords: []
     bullets: []
 
   - id: lost-and-found-db
@@ -220,12 +191,8 @@ projects:
       - Java
       - Eclipse IDE
       - Microsoft SQL Server
-    domains:
-      - data
-      - backend
-    keywords:
-      - relational modeling
-      - OOP
+    domains: []
+    keywords: []
     bullets: []
 
 leadership:
