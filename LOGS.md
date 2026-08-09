@@ -335,13 +335,55 @@ copy passed via `--projects`.
 
 No badges, no emoji headings, and no claimed capabilities that do not exist.
 
-## Status
+## Phase 9 — Web API, posting ingestion, and store writing
 
-All eight phases are done. 76 tests pass with no network access, and the
-pipeline runs end to end to a compiled PDF.
+Files: `src/resume_tailor/ingest.py`, `src/resume_tailor/web.py`,
+`save_store` in `store.py`, `serve` in `cli.py`, `tests/test_ingest.py`,
+`tests/test_web.py`. 97 tests.
 
-What is left is content, not code: `projects.yaml` ships with structure and
-empty `bullets`. Fill those in and the tool starts being useful. Visual
-iteration on the template is the other open item — the layout follows the
-existing resume, but it was designed against fixture data rather than your real
-content.
+New requirement: a browser interface where a posting can be dropped in as a URL
+or a PDF, and where the content store can be edited directly. This phase is the
+server side.
+
+**Ingestion is honest about its limits.** `text_from_url` fetches with browser
+headers, follows redirects, and reduces the page to readable text — dropping
+`script`, `nav`, `footer`, and friends, and preferring `main`/`article` when the
+page has one. It also detects a PDF response and routes it to the PDF path.
+
+The failure cases matter more than the happy one, because LinkedIn, Workday, and
+Greenhouse routinely block plain fetches. A 401/403/429 says the site refused the
+request and names pasting or a PDF as the way through. A page that yields under
+200 characters says the posting is probably JavaScript-rendered rather than
+returning a near-empty string that would quietly produce a bad ranking. A PDF
+with no text layer says it is a scan. No silent degradation anywhere: a bad
+parse would show up as a mysteriously wrong resume, which is the failure mode
+this project exists to avoid.
+
+**Writing the store.** `save_store` dumps validated content back to YAML,
+atomically — write to a temp file, copy the old file to `.bak`, then replace.
+A resume store is hand-written content that would hurt to lose, so a crash
+mid-write must not be able to truncate it. The tradeoff, documented in the file
+header it writes: saving from the UI does not preserve hand-written comments.
+
+**The API** (`web.py`) is the same pipeline over localhost: `GET/PUT /api/store`,
+`POST /api/ingest`, `POST /api/tailor`, `GET /api/resume/{run_id}` for the PDF,
+plus `/api/health` so the UI can say up front whether Tectonic and a model are
+configured. A `ResumeTailorError` handler turns every anticipated failure into
+`{"error": "..."}` with a 400, so the browser gets the same sentence the CLI
+prints rather than a 500.
+
+`PUT /api/store` validates before touching disk and returns the same
+entry-naming error the loader produces — a test confirms a rejected save leaves
+the file byte-for-byte unchanged.
+
+Tailoring caches the rendered `.tex` under a `run_id` (last 20) so the PDF can
+be compiled from exactly the selection the browser is showing, without paying
+for a second parse.
+
+**CLI shape.** `main` is now a group with `tailor` and `serve`, but a custom
+group class routes anything that is not a known subcommand to `tailor`, so
+`resume-tailor --jd posting.txt --out resume.pdf` keeps working exactly as
+before. The existing CLI tests passed unchanged, which is the point. FastAPI and
+uvicorn are imported inside `serve` so the command line does not pay for them.
+
+Not built yet: the actual page. `webui/index.html` is a placeholder.
