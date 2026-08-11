@@ -15,6 +15,7 @@ dependencies = [
     "jinja2>=3.1",
     "openai>=2.53.0",
     "pydantic>=2.7",
+    "pyjwt>=2.13.0",
     "pypdf>=6.15.0",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0",

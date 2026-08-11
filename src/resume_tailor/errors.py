@@ -27,3 +27,11 @@ class TemplateError(ResumeTailorError):
 
 class CompileError(ResumeTailorError):
     """Tectonic is missing or the document failed to compile."""
+
+
+class AuthError(ResumeTailorError):
+    """Missing, invalid, or unauthorized credentials."""
+
+
+class RateLimitError(ResumeTailorError):
+    """The user hit a daily usage cap."""

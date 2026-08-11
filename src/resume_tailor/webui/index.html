@@ -7,6 +7,27 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
+    <div id="login-gate" class="login-gate is-hidden">
+      <section class="card login-card">
+        <h2>Sign in</h2>
+        <p class="hint">
+          Invite-only. Enter the email the owner added to the allowlist; you will get a
+          magic link.
+        </p>
+        <label class="field">
+          <span>Email</span>
+          <input id="login-email" type="email" autocomplete="email" placeholder="you@example.com" />
+        </label>
+        <button class="button button-primary" id="login-button" style="width: 100%; margin-top: 14px">
+          Send magic link
+        </button>
+        <p class="hint is-hidden" id="login-sent">
+          Check your email for the link. Keep this tab open or open the link on this device.
+        </p>
+      </section>
+    </div>
+
+    <div id="app-shell">
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark">RT</span>
@@ -15,7 +36,13 @@
           <p class="brand-sub">Selects bullets you wrote. Never writes new ones.</p>
         </div>
       </div>
-      <div class="status" id="status"></div>
+      <div class="topbar-right">
+        <div class="status" id="status"></div>
+        <div class="user-chip is-hidden" id="user-chip">
+          <span id="user-email"></span>
+          <button class="link" id="logout-button" type="button">Sign out</button>
+        </div>
+      </div>
     </header>
 
     <nav class="tabs" role="tablist">
@@ -152,6 +179,7 @@
         <div id="editor"></div>
       </section>
     </main>
+    </div>
 
     <div class="toasts" id="toasts"></div>
 

@@ -1,0 +1,11 @@
+.venv
+.git
+.tools
+out
+__pycache__
+*.pyc
+.pytest_cache
+*.pdf
+.env
+*.bak
+.python-version

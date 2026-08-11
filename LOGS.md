@@ -438,13 +438,45 @@ types, `/api/health` reports the resolved Tectonic path, and `/api/store` return
 all eight entries. Node's parser checks the JavaScript for syntax errors, and
 the API is covered by the test suite.
 
+## Phase 11 — Hosted mode for friends (Fly + Supabase, LaTeX kept)
+
+Files: `supabase/migrations/001_hosting.sql`, `src/resume_tailor/auth.py`,
+`db.py`, `rate_limit.py`, `seed.py`, updates to `web.py` / `webui/*` / `cli.py`,
+`Dockerfile`, `fly.toml`, `.env.example`, `tests/test_hosting.py`.
+
+**Why not Vercel.** Tectonic is a real binary with a package cache and
+multi-second compiles. The host is one Fly Docker machine that runs FastAPI, the
+existing UI, and Tectonic together. Supabase handles Auth + Postgres only.
+
+**Two modes, one codebase.** Unset `SUPABASE_URL` → local filesystem
+`projects.yaml`, no login (existing CLI/UI/tests unchanged). Set the Supabase
+env vars → JWT auth, invite allowlist, per-user JSONB stores, daily parse/compile
+caps. `/api/config` tells the browser which mode it is in; the anon key is
+exposed, the service role key never is.
+
+**Auth.** Magic link via Supabase Auth REST (no CDN SDK). Access tokens are
+HS256-verified with `SUPABASE_JWT_SECRET`; email must appear in
+`allowed_users`. First successful load seeds `empty_store()` into
+`resume_stores` — friends never inherit someone else's bullets.
+
+**Rate limits.** `usage_events` rows, counted per UTC day. Defaults 30 parses /
+20 compiles; override with `RESUME_TAILOR_DAILY_*_LIMIT`. Over-cap returns 429
+with an actionable sentence.
+
+**UI.** Login gate when `auth_required`; Bearer token on every API call;
+sign-out clears localStorage. PDF and `.tex` downloads fetch with the same
+header (plain `<a href>` cannot).
+
+**Deploy artifacts.** Dockerfile installs Tectonic 0.17.0 + `uv sync`; Fly volume
+`tectonic_cache` at `/data` so package downloads survive restarts; secrets listed
+in the README.
+
+105 tests pass (5 skipped without Tectonic in this environment), including
+hosted auth/allowlist/rate-limit coverage with faked JWTs.
+
 ## Status
 
-Ten phases done. 98 tests pass with no network access. Both entry points work:
-`resume-tailor serve` for the browser, `resume-tailor --jd ...` for the command
-line.
+Eleven phases. Local CLI and local `serve` still work offline against
+`projects.yaml`. Hosted friends mode is code-complete; you still need to create
+the Supabase project, run the migration, set Fly secrets, and `fly deploy`.
 
-What is left is content, not code: `projects.yaml` still ships with empty
-`bullets`. The Content tab is now the fastest way to fill them in. Visual
-iteration on the resume template is the other open item — the layout follows the
-existing resume, but it was designed against fixture data.
