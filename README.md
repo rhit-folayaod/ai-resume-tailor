@@ -9,9 +9,13 @@ bullets belong on this particular application and in what order, fills a LaTeX
 template with them, and compiles it.
 
 ```
-uv run resume-tailor serve                              # browser interface
+uv run resume-tailor serve                              # browser interface (local)
 uv run resume-tailor --jd posting.txt --out resume.pdf  # command line
 ```
+
+For phone / friends access, deploy the same app to Fly.io with Supabase Auth
+(see [Hosted mode for friends](#hosted-mode-for-friends)). Do not put the
+Tectonic pipeline on Vercel — serverless cannot run it reliably.
 
 ## The no-fabrication guarantee
 
@@ -21,7 +25,8 @@ built, and it is worth describing precisely, because the whole design bends
 around it.
 
 **The store is the only source of text.** Every bullet, technology, school, and
-skill originates in `projects.yaml`. The renderer reads from it directly.
+skill originates in your content store (`projects.yaml` locally, or your
+per-user row in Supabase when hosted). The renderer reads from it directly.
 
 **There is exactly one place a model can speak into the process.** All model
 access goes through a single method, `LLMClient.complete_json(system, user)`
@@ -139,6 +144,88 @@ The header block is regenerated; inline notes are not.
 
 Nothing about the UI changes the guarantee above. `PUT /api/store` is the only
 way text enters the store, and that is you typing it.
+
+## Hosted mode for friends
+
+Local `serve` still uses `projects.yaml` on disk when `SUPABASE_URL` is unset.
+With Supabase configured, the same UI becomes invite-only and multi-user: each
+friend gets their own content store in Postgres, signs in with a magic link, and
+hits daily caps so one person cannot burn the shared OpenAI key.
+
+Stack (locked):
+
+| Piece | Choice |
+| --- | --- |
+| App | Fly.io Docker image — FastAPI + UI + Tectonic |
+| Auth + DB | Supabase Auth (magic link) + Postgres |
+| Access | `allowed_users` email allowlist |
+| Model | Shared `OPENAI_API_KEY`, default `gpt-4o-mini` |
+| Limits | 30 JD parses / 20 PDF compiles per user per UTC day (tunable) |
+
+Vercel is intentionally not used for the tailor pipeline. Tectonic needs a real
+process, disk, and enough time for package downloads.
+
+### 1. Supabase
+
+1. Create a free Supabase project.
+2. Run [`supabase/migrations/001_hosting.sql`](supabase/migrations/001_hosting.sql)
+   in the SQL editor.
+3. Invite yourself (and friends later) — emails are lowercased:
+
+```sql
+insert into public.allowed_users (email, note)
+values ('you@example.com', 'owner');
+```
+
+4. Auth → URL configuration: add your Fly URL (e.g.
+   `https://ai-resume-tailor.fly.dev`) to Redirect URLs.
+5. Copy from Project Settings → API:
+   - Project URL → `SUPABASE_URL`
+   - `anon` `public` key → `SUPABASE_ANON_KEY`
+   - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (server only)
+6. Project Settings → API → JWT Secret → `SUPABASE_JWT_SECRET`
+
+### 2. Fly.io
+
+```
+fly auth login
+# App name in fly.toml is ai-resume-tailor (ord). Create only if it does not exist yet:
+# fly apps create ai-resume-tailor
+fly volumes create tectonic_cache --region ord --size 1
+fly secrets set \
+  OPENAI_API_KEY=sk-... \
+  SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
+  SUPABASE_ANON_KEY=... \
+  SUPABASE_SERVICE_ROLE_KEY=... \
+  SUPABASE_JWT_SECRET=... \
+  RESUME_TAILOR_MODEL=gpt-4o-mini
+fly deploy
+```
+
+If deploy fails with a mount error, the volume is missing — create it in the same
+region as `primary_region` in `fly.toml` (`ord`), then deploy again.
+
+Optional caps:
+
+```
+fly secrets set RESUME_TAILOR_DAILY_PARSE_LIMIT=30 RESUME_TAILOR_DAILY_COMPILE_LIMIT=20
+```
+
+Open `https://<app>.fly.dev` on your phone, request a magic link to an allowlisted
+email, then fill the Content tab (first login seeds an empty store).
+
+### 3. Invite a friend
+
+```sql
+insert into public.allowed_users (email, note)
+values ('friend@example.com', 'classmate');
+```
+
+Tell them the Fly URL. They sign in with that email. Their bullets never mix with
+yours — stores are keyed by `auth.users.id`.
+
+See [`.env.example`](.env.example) for every variable. Local CLI usage is
+unchanged and does not need Supabase.
 
 ## Command line usage
 
@@ -260,9 +347,10 @@ compile error.
 uv run pytest
 ```
 
-98 tests, no network access. An autouse fixture makes any test that tries to
+105+ tests, no network access. An autouse fixture makes any test that tries to
 construct a real LLM client fail, so the suite cannot start making live calls by
 accident. The end-to-end tests skip themselves if Tectonic is not installed.
+Hosted-mode tests fake JWTs and Supabase HTTP.
 
 The browser UI is plain HTML, CSS, and DOM JavaScript under
 `src/resume_tailor/webui/` — no build step, no bundler, no CDN. Edit the files

@@ -231,7 +231,12 @@ def serve(
 
     url = f"http://{host}:{port}"
     click.secho(f"resume-tailor is running at {url}", fg="green")
-    click.secho(f"editing {Path(store_path).resolve()}", dim=True)
+    import os
+
+    if os.environ.get("SUPABASE_URL", "").strip():
+        click.secho("hosted mode: Supabase auth + per-user stores", dim=True)
+    else:
+        click.secho(f"editing {Path(store_path).resolve()}", dim=True)
 
     if open_browser:
         import threading
