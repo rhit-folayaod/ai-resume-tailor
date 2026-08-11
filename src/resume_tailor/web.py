@@ -262,7 +262,18 @@ def create_app(
 
     @app.get("/")
     def index() -> FileResponse:
-        return FileResponse(WEBUI_DIR / "index.html")
+        return FileResponse(
+            WEBUI_DIR / "index.html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.middleware("http")
+    async def _no_store_webui(request: Request, call_next):  # type: ignore[no-untyped-def]
+        response = await call_next(request)
+        path = request.url.path
+        if path == "/" or path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     app.mount("/static", StaticFiles(directory=str(WEBUI_DIR)), name="static")
     return app

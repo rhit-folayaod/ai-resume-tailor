@@ -7,6 +7,7 @@
  */
 
 const SESSION_KEY = "resume_tailor_session";
+const PKCE_VERIFIER_KEY = "resume_tailor_pkce_verifier";
 
 const state = {
   store: null,
@@ -57,7 +58,9 @@ async function api(path, options = {}) {
   const isJson = (response.headers.get("content-type") || "").includes("json");
   const body = isJson ? await response.json() : null;
   if (!response.ok) {
-    if (response.status === 401 && state.authRequired) {
+    // Only treat /api/me as a hard sign-out. Other 401s (store/DB blips, stale
+    // optional auth) must not bounce a just-authenticated user back to login.
+    if (response.status === 401 && state.authRequired && path === "/api/me") {
       clearSession();
       showLogin();
     }
@@ -116,63 +119,157 @@ function showApp() {
   }
 }
 
-function consumeAuthRedirect() {
-  // Supabase may put tokens in the hash (#access_token=...) or, less often,
-  // in the query string. Errors land the same way.
-  const hash = window.location.hash.startsWith("#")
-    ? window.location.hash.slice(1)
-    : "";
-  const query = window.location.search.startsWith("?")
-    ? window.location.search.slice(1)
-    : "";
-  const params = new URLSearchParams(hash || query);
-  if (!hash && !query) return false;
-
-  const error = params.get("error_description") || params.get("error");
-  if (error) {
-    history.replaceState(null, "", window.location.pathname);
-    toast(decodeURIComponent(error.replace(/\+/g, " ")), "error");
-    return false;
-  }
-
-  if (params.get("code") && !params.get("access_token")) {
-    history.replaceState(null, "", window.location.pathname);
-    toast(
-      "This login link used a code the app cannot finish exchanging. In Supabase, set Site URL to https://ai-resume-tailor.fly.dev and add that same URL under Redirect URLs, then request a new magic link.",
-      "error",
-    );
-    return false;
-  }
-
-  const access = params.get("access_token");
-  const refresh = params.get("refresh_token");
-  if (!access) return false;
-  saveSession({
-    access_token: access,
-    refresh_token: refresh || "",
-    expires_at: Date.now() + Number(params.get("expires_in") || 3600) * 1000,
-  });
-  history.replaceState(null, "", window.location.pathname);
-  return true;
+function base64UrlEncode(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-async function sendMagicLink(email) {
-  const response = await fetch(`${state.supabaseUrl}/auth/v1/otp`, {
+function randomVerifier() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes);
+}
+
+async function challengeFromVerifier(verifier) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+  return base64UrlEncode(digest);
+}
+
+async function exchangeAuthCode(code) {
+  const verifier = localStorage.getItem(PKCE_VERIFIER_KEY);
+  if (!verifier) {
+    throw new Error(
+      "This login link must be opened in the same browser where you clicked “Send magic link”. Request a new link and open it here.",
+    );
+  }
+  const response = await fetch(`${state.supabaseUrl}/auth/v1/token?grant_type=pkce`, {
     method: "POST",
     headers: {
       apikey: state.supabaseAnonKey,
       Authorization: `Bearer ${state.supabaseAnonKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      email,
-      create_user: true,
-      options: { email_redirect_to: window.location.origin + "/" },
-    }),
+    body: JSON.stringify({ auth_code: code, code_verifier: verifier }),
   });
+  const body = await response.json().catch(() => null);
   if (!response.ok) {
+    throw new Error(
+      (body && (body.error_description || body.msg || body.error)) ||
+        "could not finish sign-in from the magic link",
+    );
+  }
+  localStorage.removeItem(PKCE_VERIFIER_KEY);
+  saveSession({
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || "",
+    expires_at: Date.now() + Number(body.expires_in || 3600) * 1000,
+  });
+}
+
+async function consumeAuthRedirect() {
+  // Supabase PKCE redirects with ?code=...; older/implicit flow uses #access_token=...
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+  const query = window.location.search.startsWith("?") ? window.location.search.slice(1) : "";
+  if (!hash && !query) return false;
+
+  const hashParams = new URLSearchParams(hash);
+  const queryParams = new URLSearchParams(query);
+  const error =
+    hashParams.get("error_description") ||
+    hashParams.get("error") ||
+    queryParams.get("error_description") ||
+    queryParams.get("error");
+  if (error) {
+    history.replaceState(null, "", window.location.pathname);
+    toast(decodeURIComponent(error.replace(/\+/g, " ")), "error");
+    return false;
+  }
+
+  const code = queryParams.get("code");
+  if (code) {
+    history.replaceState(null, "", window.location.pathname);
+    await exchangeAuthCode(code);
+    return true;
+  }
+
+  // Some email clients land on ?token_hash=...&type=email (or magiclink).
+  const tokenHash = queryParams.get("token_hash");
+  const otpType = queryParams.get("type");
+  if (tokenHash && otpType) {
+    history.replaceState(null, "", window.location.pathname);
+    await verifyTokenHash(tokenHash, otpType);
+    return true;
+  }
+
+  const access = hashParams.get("access_token") || queryParams.get("access_token");
+  const refresh = hashParams.get("refresh_token") || queryParams.get("refresh_token") || "";
+  const expires = hashParams.get("expires_in") || queryParams.get("expires_in") || "3600";
+  if (!access) return false;
+  saveSession({
+    access_token: access,
+    refresh_token: refresh,
+    expires_at: Date.now() + Number(expires) * 1000,
+  });
+  history.replaceState(null, "", window.location.pathname);
+  return true;
+}
+
+async function verifyTokenHash(tokenHash, type) {
+  const response = await fetch(`${state.supabaseUrl}/auth/v1/verify`, {
+    method: "POST",
+    headers: {
+      apikey: state.supabaseAnonKey,
+      Authorization: `Bearer ${state.supabaseAnonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ token_hash: tokenHash, type }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(
+      (body && (body.error_description || body.msg || body.error)) ||
+        "could not finish sign-in from the magic link",
+    );
+  }
+  saveSession({
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || "",
+    expires_at: Date.now() + Number(body.expires_in || 3600) * 1000,
+  });
+}
+
+async function sendMagicLink(email) {
+  const verifier = randomVerifier();
+  const challenge = await challengeFromVerifier(verifier);
+  localStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+
+  // redirect_to must be a query param (Supabase Auth / auth-js), not a body field.
+  const redirectTo = encodeURIComponent(`${window.location.origin}/`);
+  const response = await fetch(
+    `${state.supabaseUrl}/auth/v1/otp?redirect_to=${redirectTo}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: state.supabaseAnonKey,
+        Authorization: `Bearer ${state.supabaseAnonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        create_user: true,
+        code_challenge: challenge,
+        code_challenge_method: "s256",
+      }),
+    },
+  );
+  if (!response.ok) {
+    localStorage.removeItem(PKCE_VERIFIER_KEY);
     const body = await response.json().catch(() => null);
-    throw new Error((body && (body.error_description || body.msg || body.error)) || "could not send magic link");
+    throw new Error(
+      (body && (body.error_description || body.msg || body.error)) || "could not send magic link",
+    );
   }
 }
 
@@ -880,13 +977,18 @@ window.addEventListener("beforeunload", (event) => {
 });
 
 async function boot() {
-  consumeAuthRedirect();
-  loadSession();
-
   const config = await api("/api/config");
   state.authRequired = Boolean(config.auth_required);
   state.supabaseUrl = config.supabase_url || "";
   state.supabaseAnonKey = config.supabase_anon_key || "";
+
+  // Need Supabase URL/anon key before exchanging a ?code= from the magic link.
+  try {
+    await consumeAuthRedirect();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+  loadSession();
 
   if (!state.authRequired) {
     showApp();
@@ -895,28 +997,40 @@ async function boot() {
     return;
   }
 
-  if (state.session) {
-    try {
-      await refreshSessionIfNeeded();
-      await loadHealth();
-      if (!state.session) {
-        showLogin();
-        return;
-      }
-      // Confirm allowlist via a protected route before unlocking the UI.
-      const me = await api("/api/me");
-      state.userEmail = me.user.email;
-      showApp();
-      await loadStore();
-      return;
-    } catch (error) {
-      clearSession();
-      toast(error.message, "error");
-    }
+  if (!state.session) {
+    showLogin();
+    await loadHealth();
+    return;
   }
 
-  showLogin();
-  await loadHealth();
+  try {
+    await refreshSessionIfNeeded();
+    if (!state.session) {
+      showLogin();
+      await loadHealth();
+      return;
+    }
+    const me = await api("/api/me");
+    state.userEmail = me.user.email;
+    showApp();
+    await loadHealth();
+  } catch (error) {
+    clearSession();
+    showLogin();
+    toast(error.message, "error");
+    await loadHealth();
+    return;
+  }
+
+  // Store load failures must not kick the user back to login.
+  try {
+    await loadStore();
+  } catch (error) {
+    toast(error.message, "error");
+  }
 }
 
-boot().catch((error) => toast(error.message, "error"));
+boot().catch((error) => {
+  showLogin();
+  toast(error.message, "error");
+});

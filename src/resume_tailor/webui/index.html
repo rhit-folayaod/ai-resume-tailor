@@ -7,12 +7,12 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <div id="login-gate" class="login-gate is-hidden">
+    <div id="login-gate" class="login-gate">
       <section class="card login-card">
         <h2>Sign in</h2>
         <p class="hint">
           Invite-only. Enter the email the owner added to the allowlist; you will get a
-          magic link.
+          magic link. Open the link in this same browser.
         </p>
         <label class="field">
           <span>Email</span>
@@ -22,12 +22,13 @@
           Send magic link
         </button>
         <p class="hint is-hidden" id="login-sent">
-          Check your email for the link. Keep this tab open or open the link on this device.
+          Check your email for the link. Open it in this same browser — a different
+          phone/browser cannot finish the login.
         </p>
       </section>
     </div>
 
-    <div id="app-shell">
+    <div id="app-shell" class="is-hidden">
     <header class="topbar">
       <div class="brand">
         <span class="brand-mark">RT</span>
