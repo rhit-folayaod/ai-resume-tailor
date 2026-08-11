@@ -28,7 +28,7 @@ def store_path(tmp_path):
 
 @pytest.fixture
 def client(store_path):
-    return TestClient(web.create_app(store_path=store_path))
+    return TestClient(web.create_app(store_path=store_path, hosting=None))
 
 
 def use_client(monkeypatch, *responses: str) -> ScriptedClient:
@@ -41,7 +41,12 @@ def test_health_reports_what_is_configured(client, store_path):
     body = client.get("/api/health").json()
     assert body["store_exists"] is True
     assert body["store_path"] == str(store_path.resolve())
+    assert body["auth_required"] is False
     assert "model" in body
+
+
+def test_config_local_mode(client):
+    assert client.get("/api/config").json() == {"auth_required": False}
 
 
 def test_reads_the_store(client):
@@ -175,6 +180,8 @@ def test_serves_the_page(client):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "resume-tailor" in response.text
+    assert 'id="login-gate"' in response.text
+    assert 'id="app-shell"' in response.text
 
 
 def test_serves_the_static_assets_the_page_asks_for(client):

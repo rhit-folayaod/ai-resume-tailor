@@ -1,30 +1,39 @@
 """HTTP API behind the browser UI.
 
-The same pipeline the CLI runs, exposed over localhost. Nothing here can
-introduce resume content either: `/api/tailor` returns selections drawn from the
-store, and the only way text enters the store is `PUT /api/store`, which is you
-typing it.
+Local mode (no SUPABASE_URL): filesystem `projects.yaml`, no auth — same as
+before. Hosted mode: Supabase JWT + allowlist + per-user JSONB store + rate
+limits. Nothing here invents resume content either way.
 """
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import Body, FastAPI, File, Form, Request, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
+from .auth import (
+    AuthUser,
+    HostingConfig,
+    extract_bearer,
+    require_allowed_user,
+    verify_access_token,
+)
 from .compile import compile_pdf, find_tectonic
-from .errors import CompileError, ResumeTailorError
+from .db import load_or_create_store, save_user_store
+from .errors import AuthError, CompileError, RateLimitError, ResumeTailorError
 from .ingest import text_from_upload, text_from_url
 from .jd_parser import parse_job_description
 from .latex import render_resume
 from .llm import DEFAULT_MODEL, LLMClient, OpenAIClient
 from .models import ResumeStore
 from .ranking import Selection, SelectionBudget, select
+from .rate_limit import check_and_record
 from .store import DEFAULT_STORE_PATH, format_validation_error, load_store, save_store
 
 WEBUI_DIR = Path(__file__).parent / "webui"
@@ -53,52 +62,128 @@ def create_app(
     store_path: Path | str = DEFAULT_STORE_PATH,
     model: str | None = None,
     tectonic: str | None = None,
+    hosting: HostingConfig | None | object = ...,
 ) -> FastAPI:
     store_path = Path(store_path)
+    if hosting is ...:
+        hosting = HostingConfig.from_env()
     app = FastAPI(title="resume-tailor", docs_url=None, redoc_url=None)
+    # run_id -> {tex, user_id}; user_id is None in local mode
     runs: dict[str, dict[str, Any]] = {}
+
+    @app.exception_handler(AuthError)
+    async def _auth_failure(_: Request, exc: AuthError) -> JSONResponse:
+        return JSONResponse(status_code=401, content={"error": str(exc)})
+
+    @app.exception_handler(RateLimitError)
+    async def _rate_limit(_: Request, exc: RateLimitError) -> JSONResponse:
+        return JSONResponse(status_code=429, content={"error": str(exc)})
 
     @app.exception_handler(ResumeTailorError)
     async def _expected_failure(_: Request, exc: ResumeTailorError) -> JSONResponse:
-        # Every anticipated failure reaches the browser as a sentence, not a 500.
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
+    def optional_user(request: Request) -> AuthUser | None:
+        """Local mode: always None. Hosted: None when no Bearer token."""
+
+        if hosting is None:
+            return None
+        header = request.headers.get("authorization")
+        if not header:
+            return None
+        token = extract_bearer(header)
+        user = verify_access_token(token, hosting)
+        return require_allowed_user(user, hosting)
+
+    def require_user(request: Request) -> AuthUser | None:
+        if hosting is None:
+            return None
+        user = optional_user(request)
+        if user is None:
+            raise AuthError("sign in required.")
+        return user
+
+    def read_store_for(user: AuthUser | None) -> ResumeStore:
+        if hosting is None or user is None:
+            return load_store(store_path)
+        return load_or_create_store(user, hosting)
+
+    def write_store_for(user: AuthUser | None, store: ResumeStore) -> ResumeStore:
+        if hosting is None or user is None:
+            save_store(store, store_path)
+            return store
+        return save_user_store(user, store, hosting)
+
+    @app.get("/api/config")
+    def config() -> dict[str, Any]:
+        """Public client bootstrap. Anon key is safe to expose; service role is not."""
+
+        if hosting is None:
+            return {"auth_required": False}
+        return {
+            "auth_required": True,
+            "supabase_url": hosting.supabase_url,
+            "supabase_anon_key": hosting.supabase_anon_key,
+            "daily_parse_limit": hosting.daily_parse_limit,
+            "daily_compile_limit": hosting.daily_compile_limit,
+        }
+
     @app.get("/api/health")
-    def health() -> dict[str, Any]:
+    def health(user: AuthUser | None = Depends(optional_user)) -> dict[str, Any]:
         try:
             tectonic_path: str | None = find_tectonic(tectonic)
         except CompileError:
             tectonic_path = None
-        import os
 
-        return {
-            "store_path": str(store_path.resolve()),
-            "store_exists": store_path.exists(),
+        body: dict[str, Any] = {
+            "auth_required": hosting is not None,
             "tectonic": tectonic_path,
             "model": model or os.environ.get("RESUME_TAILOR_MODEL") or DEFAULT_MODEL,
             "model_configured": bool(
                 os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_BASE_URL")
             ),
         }
+        if hosting is None:
+            body["store_path"] = str(store_path.resolve())
+            body["store_exists"] = store_path.exists()
+        else:
+            body["user"] = {"email": user.email, "id": user.id} if user else None
+            body["daily_parse_limit"] = hosting.daily_parse_limit
+            body["daily_compile_limit"] = hosting.daily_compile_limit
+        return body
+
+    @app.get("/api/me")
+    def me(user: AuthUser | None = Depends(require_user)) -> dict[str, Any]:
+        if hosting is None:
+            return {"auth_required": False, "user": None}
+        assert user is not None
+        return {"auth_required": True, "user": {"email": user.email, "id": user.id}}
 
     @app.get("/api/store")
-    def read_store() -> dict[str, Any]:
-        return load_store(store_path).model_dump(mode="json")
+    def read_store(user: AuthUser | None = Depends(require_user)) -> dict[str, Any]:
+        return read_store_for(user).model_dump(mode="json")
 
     @app.put("/api/store")
-    def write_store(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    def write_store(
+        payload: dict[str, Any] = Body(...),
+        user: AuthUser | None = Depends(require_user),
+    ) -> dict[str, Any]:
         try:
             store = ResumeStore.model_validate(payload)
         except ValidationError as exc:
             return JSONResponse(
                 status_code=422,
-                content={"error": "that content is not valid.\n" + format_validation_error(exc, payload)},
+                content={
+                    "error": "that content is not valid.\n"
+                    + format_validation_error(exc, payload)
+                },
             )
-        save_store(store, store_path)
-        return store.model_dump(mode="json")
+        saved = write_store_for(user, store)
+        return saved.model_dump(mode="json")
 
     @app.post("/api/ingest")
     async def ingest(
+        user: AuthUser | None = Depends(require_user),
         url: str | None = Form(default=None),
         file: UploadFile | None = File(default=None),
     ) -> dict[str, Any]:
@@ -111,8 +196,14 @@ def create_app(
         raise ResumeTailorError("give me a URL or a file.")
 
     @app.post("/api/tailor")
-    def tailor(request: TailorRequest) -> dict[str, Any]:
-        store = load_store(store_path)
+    def tailor(
+        request: TailorRequest,
+        user: AuthUser | None = Depends(require_user),
+    ) -> dict[str, Any]:
+        if hosting is not None and user is not None:
+            check_and_record(user, "parse", hosting)
+
+        store = read_store_for(user)
         client = make_client(model)
 
         jd = parse_job_description(request.jd_text, client)
@@ -130,6 +221,7 @@ def create_app(
         run_id = uuid.uuid4().hex
         runs[run_id] = {
             "tex": render_resume(store, selection, jd, reorder_skills=request.reorder_skills),
+            "user_id": user.id if user else None,
         }
         while len(runs) > MAX_CACHED_RUNS:
             runs.pop(next(iter(runs)))
@@ -141,10 +233,13 @@ def create_app(
         }
 
     @app.get("/api/resume/{run_id}")
-    def resume_pdf(run_id: str) -> Response:
-        run = runs.get(run_id)
-        if run is None:
-            raise ResumeTailorError("that result expired; tailor the resume again.")
+    def resume_pdf(
+        run_id: str,
+        user: AuthUser | None = Depends(require_user),
+    ) -> Response:
+        run = _owned_run(runs, run_id, user)
+        if hosting is not None and user is not None:
+            check_and_record(user, "compile", hosting)
         pdf = compile_pdf(run["tex"], tectonic=tectonic)
         return Response(
             content=pdf,
@@ -153,10 +248,11 @@ def create_app(
         )
 
     @app.get("/api/resume/{run_id}/tex")
-    def resume_tex(run_id: str) -> Response:
-        run = runs.get(run_id)
-        if run is None:
-            raise ResumeTailorError("that result expired; tailor the resume again.")
+    def resume_tex(
+        run_id: str,
+        user: AuthUser | None = Depends(require_user),
+    ) -> Response:
+        run = _owned_run(runs, run_id, user)
         return Response(content=run["tex"], media_type="text/plain; charset=utf-8")
 
     @app.get("/")
@@ -165,6 +261,26 @@ def create_app(
 
     app.mount("/static", StaticFiles(directory=str(WEBUI_DIR)), name="static")
     return app
+
+
+def create_app_for_server() -> FastAPI:
+    """Uvicorn factory entrypoint for Docker / Fly (reads hosting from the env)."""
+
+    return create_app()
+
+
+def _owned_run(
+    runs: dict[str, dict[str, Any]],
+    run_id: str,
+    user: AuthUser | None,
+) -> dict[str, Any]:
+    run = runs.get(run_id)
+    if run is None:
+        raise ResumeTailorError("that result expired; tailor the resume again.")
+    owner = run.get("user_id")
+    if owner is not None and (user is None or user.id != owner):
+        raise AuthError("that result belongs to another session; tailor again.")
+    return run
 
 
 def _selection_payload(selection: Selection) -> dict[str, Any]:

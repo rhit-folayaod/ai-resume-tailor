@@ -6,12 +6,19 @@
  * survive.
  */
 
+const SESSION_KEY = "resume_tailor_session";
+
 const state = {
   store: null,
   pristine: "",
   jdText: "",
   jdSource: "",
   runId: null,
+  authRequired: false,
+  supabaseUrl: "",
+  supabaseAnonKey: "",
+  session: null,
+  userEmail: "",
 };
 
 /* Helpers ------------------------------------------------------------------ */
@@ -39,11 +46,21 @@ function toast(message, kind = "") {
   setTimeout(() => node.remove(), kind === "error" ? 12000 : 5000);
 }
 
+function authHeaders() {
+  if (!state.session || !state.session.access_token) return {};
+  return { Authorization: `Bearer ${state.session.access_token}` };
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, options);
+  const headers = { ...(options.headers || {}), ...authHeaders() };
+  const response = await fetch(path, { ...options, headers });
   const isJson = (response.headers.get("content-type") || "").includes("json");
   const body = isJson ? await response.json() : null;
   if (!response.ok) {
+    if (response.status === 401 && state.authRequired) {
+      clearSession();
+      showLogin();
+    }
     throw new Error((body && body.error) || `${response.status} ${response.statusText}`);
   }
   return body;
@@ -59,6 +76,135 @@ function busy(button, label) {
     button.innerHTML = original;
   };
 }
+
+/* Auth (hosted mode) ------------------------------------------------------- */
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    state.session = raw ? JSON.parse(raw) : null;
+  } catch {
+    state.session = null;
+  }
+}
+
+function saveSession(session) {
+  state.session = session;
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+function clearSession() {
+  state.session = null;
+  state.userEmail = "";
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function showLogin() {
+  $("login-gate").classList.remove("is-hidden");
+  $("app-shell").classList.add("is-hidden");
+  $("user-chip").classList.add("is-hidden");
+}
+
+function showApp() {
+  $("login-gate").classList.add("is-hidden");
+  $("app-shell").classList.remove("is-hidden");
+  if (state.userEmail) {
+    $("user-email").textContent = state.userEmail;
+    $("user-chip").classList.remove("is-hidden");
+  } else {
+    $("user-chip").classList.add("is-hidden");
+  }
+}
+
+function consumeAuthRedirect() {
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (!hash) return false;
+  const params = new URLSearchParams(hash);
+  const access = params.get("access_token");
+  const refresh = params.get("refresh_token");
+  if (!access) return false;
+  saveSession({
+    access_token: access,
+    refresh_token: refresh || "",
+    expires_at: Date.now() + Number(params.get("expires_in") || 3600) * 1000,
+  });
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+  return true;
+}
+
+async function sendMagicLink(email) {
+  const response = await fetch(`${state.supabaseUrl}/auth/v1/otp`, {
+    method: "POST",
+    headers: {
+      apikey: state.supabaseAnonKey,
+      Authorization: `Bearer ${state.supabaseAnonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      create_user: true,
+      options: { email_redirect_to: window.location.origin + "/" },
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error((body && (body.error_description || body.msg || body.error)) || "could not send magic link");
+  }
+}
+
+async function refreshSessionIfNeeded() {
+  if (!state.session || !state.session.refresh_token) return;
+  if (state.session.expires_at && Date.now() < state.session.expires_at - 60_000) return;
+  const response = await fetch(
+    `${state.supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
+    {
+      method: "POST",
+      headers: {
+        apikey: state.supabaseAnonKey,
+        Authorization: `Bearer ${state.supabaseAnonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: state.session.refresh_token }),
+    },
+  );
+  if (!response.ok) {
+    clearSession();
+    return;
+  }
+  const body = await response.json();
+  saveSession({
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || state.session.refresh_token,
+    expires_at: Date.now() + Number(body.expires_in || 3600) * 1000,
+  });
+}
+
+$("login-button").addEventListener("click", async () => {
+  const email = $("login-email").value.trim();
+  if (!email) return;
+  const done = busy($("login-button"), "Sending");
+  try {
+    await sendMagicLink(email);
+    $("login-sent").classList.remove("is-hidden");
+    toast("Magic link sent.", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    done();
+  }
+});
+
+$("login-email").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") $("login-button").click();
+});
+
+$("logout-button").addEventListener("click", () => {
+  clearSession();
+  showLogin();
+  toast("Signed out.");
+});
 
 /* Tabs --------------------------------------------------------------------- */
 
@@ -84,10 +230,24 @@ async function loadHealth() {
         ? { text: "tectonic ready", kind: "ok" }
         : { text: "tectonic missing", kind: "bad" },
     ];
+    if (health.auth_required) {
+      pills.push(
+        health.user
+          ? { text: "signed in", kind: "ok" }
+          : { text: "sign in required", kind: "bad" },
+      );
+    }
     $("status").replaceChildren(
       ...pills.map((pill) => el("span", { class: `pill ${pill.kind}`, text: pill.text })),
     );
-    $("store-path").textContent = health.store_path;
+    if (health.store_path) {
+      $("store-path").textContent = health.store_path;
+    } else if (health.user) {
+      $("store-path").textContent = `hosted store for ${health.user.email}`;
+    } else {
+      $("store-path").textContent = "hosted mode";
+    }
+    if (health.user) state.userEmail = health.user.email;
   } catch (error) {
     toast(error.message, "error");
   }
@@ -264,17 +424,41 @@ function renderSelection(result) {
   $("results-empty").classList.add("is-hidden");
   $("preview").classList.add("is-hidden");
   $("download-pdf").classList.add("is-hidden");
-  $("download-tex").href = `/api/resume/${state.runId}/tex`;
   $("download-tex").classList.remove("is-hidden");
+  $("download-tex").onclick = async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch(`/api/resume/${state.runId}/tex`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error((body && body.error) || "could not fetch .tex");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "resume.tex";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast(error.message, "error");
+    }
+  };
 }
 
 $("build-pdf").addEventListener("click", async () => {
   if (!state.runId) return;
   const done = busy($("build-pdf"), "Compiling");
   try {
-    const response = await fetch(`/api/resume/${state.runId}`);
+    const response = await fetch(`/api/resume/${state.runId}`, { headers: authHeaders() });
     if (!response.ok) {
       const body = await response.json().catch(() => null);
+      if (response.status === 401 && state.authRequired) {
+        clearSession();
+        showLogin();
+      }
       throw new Error((body && body.error) || "compilation failed");
     }
     const url = URL.createObjectURL(await response.blob());
@@ -673,5 +857,44 @@ window.addEventListener("beforeunload", (event) => {
   if (JSON.stringify(state.store) !== state.pristine) event.preventDefault();
 });
 
-loadHealth();
-loadStore();
+async function boot() {
+  consumeAuthRedirect();
+  loadSession();
+
+  const config = await api("/api/config");
+  state.authRequired = Boolean(config.auth_required);
+  state.supabaseUrl = config.supabase_url || "";
+  state.supabaseAnonKey = config.supabase_anon_key || "";
+
+  if (!state.authRequired) {
+    showApp();
+    await loadHealth();
+    await loadStore();
+    return;
+  }
+
+  if (state.session) {
+    try {
+      await refreshSessionIfNeeded();
+      await loadHealth();
+      if (!state.session) {
+        showLogin();
+        return;
+      }
+      // Confirm allowlist via a protected route before unlocking the UI.
+      const me = await api("/api/me");
+      state.userEmail = me.user.email;
+      showApp();
+      await loadStore();
+      return;
+    } catch (error) {
+      clearSession();
+      toast(error.message, "error");
+    }
+  }
+
+  showLogin();
+  await loadHealth();
+}
+
+boot().catch((error) => toast(error.message, "error"));
