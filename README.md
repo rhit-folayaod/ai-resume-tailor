@@ -1,74 +1,66 @@
 # resume-tailor
 
-A command line tool that tailors a resume to a specific job posting, then
-compiles it to a PDF with LaTeX.
+A CLI and browser app that tailors a resume to a specific job posting, then
+compiles it to PDF with LaTeX.
 
-It does not write your resume. You write every bullet yourself, once, in
-`projects.yaml`. Given a job description, the tool decides which of those
-bullets belong on this particular application and in what order, fills a LaTeX
-template with them, and compiles it.
+It does not write your resume. You write every bullet yourself (by hand or by
+importing a resume you already wrote). Given a job description, the tool decides
+which of those bullets belong on this application and in what order, fills a
+LaTeX template, and compiles it.
 
 ```
-uv run resume-tailor serve                              # browser interface (local)
-uv run resume-tailor --jd posting.txt --out resume.pdf  # command line
+uv run resume-tailor serve                              # browser UI (local)
+uv run resume-tailor --jd posting.txt --out resume.pdf  # CLI
 ```
 
-For phone / friends access, deploy the same app to Fly.io with Supabase Auth
-(see [Hosted mode for friends](#hosted-mode-for-friends)). Do not put the
-Tectonic pipeline on Vercel — serverless cannot run it reliably.
+**Live (invite-only):** [https://ai-resume-tailor.fly.dev](https://ai-resume-tailor.fly.dev)
+— Fly.io + Supabase Auth. Do not put the Tectonic pipeline on Vercel; serverless
+cannot run it reliably.
 
 ## The no-fabrication guarantee
 
-The tool cannot put a sentence on your resume that you did not write. Not
-"is instructed not to" — cannot. That is a property of how the pipeline is
-built, and it is worth describing precisely, because the whole design bends
-around it.
+The tool cannot put a sentence on your resume that did not come from your content
+store. Not "is instructed not to" — cannot. That is a property of how the
+pipeline is built.
 
-**The store is the only source of text.** Every bullet, technology, school, and
-skill originates in your content store (`projects.yaml` locally, or your
-per-user row in Supabase when hosted). The renderer reads from it directly.
+**The store is the only source of printed text.** Every bullet, technology,
+school, and skill originates in your content store (`projects.yaml` locally, or
+your per-user row in Supabase when hosted). The LaTeX renderer reads from it
+directly.
 
-**There is exactly one place a model can speak into the process.** All model
-access goes through a single method, `LLMClient.complete_json(system, user)`
-(`llm.py`). There is no other network call and no other way for generated text
-to enter. Two callers use it:
+**All model access goes through one method.**
+`LLMClient.complete_json(system, user)` in `llm.py` is the only network path for
+model output. Three callers use it:
 
-1. **The job description parser** (`jd_parser.py`) turns the posting into
-   required skills, preferred skills, a role characterization, and a seniority.
-   None of this is ever printed. It exists only to produce terms to score your
-   content against. A hallucinated skill here can change which of your real
-   bullets get picked; it cannot change what any of them say.
+1. **Job description parser** (`jd_parser.py`) — extracts required/preferred
+   skills and role flavor from the posting. None of this is printed; it only
+   produces terms to score your content against.
+2. **Optional rerank** (`ranking.py`) — reorders a shortlist. The response schema
+   is `{"project_id": str, "bullet_index": int}` with no text field. Bullet text
+   is looked up from the store *after* the call, so model prose is never read.
+3. **Resume import** (`resume_parser.py`) — maps an uploaded/pasted resume into a
+   `ResumeStore` draft. It is instructed to copy only what is on the page (no
+   invented jobs or bullets). The draft loads into the Content editor; nothing is
+   persisted until you review and Save through the same validated store path.
 
-2. **The optional rerank** (`ranking.py`) reorders a shortlist. Its response
-   schema is `{"project_id": str, "bullet_index": int}` with extra keys
-   forbidden. There is no text field. Bullet text is looked up from the store
-   *after* the call returns, so text the model emits is not merely rejected —
-   it is never read. A model that tries to improve a bullet gets a validation
-   error instead.
+**The candidate set is frozen before rerank.** Selection scores and shortlists
+deterministically first; only then is the model contacted. Every reference in the
+response is checked against that frozen set.
 
-**The candidate set is frozen before the call.** Selection scores and shortlists
-deterministically first; only then is the model contacted, and only with the
-resulting list. Every reference in the response is checked against that frozen
-set. A reference to a project or bullet index that is not in it fails validation,
-which re-prompts once with the specific bad id and then raises rather than
-silently dropping.
+**Rerank is off by default.** Deterministic scoring runs unless you pass
+`--llm-rank` (or check the UI box).
 
-**The rerank is off by default.** Deterministic scoring runs unless you pass
-`--llm-rank`, so the default path involves no model at all beyond parsing the
-posting.
+**Every boundary is schema-validated.** The store, parsed posting, and rerank
+response are Pydantic models that reject unknown keys.
 
-**Every boundary is schema-validated.** The store, the parsed posting, and the
-rerank response are Pydantic models that reject unknown keys. Malformed model
-output produces a clear validation error, not a quietly wrong resume.
-
-What the tool *does* change: which entries appear, which of their bullets
-appear, what order they are in, and — with `--reorder-skills` — the order of
-skills within their line. Reordering is not rewriting. If a posting wants a
-skill you do not have, it does not appear, because it is not in your store.
+What the tool *does* change: which entries appear, which of their bullets appear,
+what order they are in, and — with `--reorder-skills` — the order of skills
+within their line. If a posting wants a skill you do not have, it does not
+appear.
 
 ## Setup
 
-Requires Python 3.11 or newer, [uv](https://docs.astral.sh/uv/), and Tectonic.
+Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), and Tectonic.
 
 ```
 git clone https://github.com/rhit-folayaod/ai-resume-tailor
@@ -79,12 +71,7 @@ uv sync
 ### Tectonic
 
 Tectonic is a self-contained LaTeX engine: one binary that downloads only the
-packages a document actually needs, rather than a multi-gigabyte TeX Live
-install. The first compile takes a while as it fetches packages; later ones are
-fast.
-
-Install it whichever way fits your platform ([full
-instructions](https://tectonic-typesetting.github.io/book/latest/installation/)):
+packages a document needs. The first compile is slow; later ones are fast.
 
 ```
 brew install tectonic                     # macOS
@@ -92,11 +79,9 @@ curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustified.net | sh
 conda install -c conda-forge tectonic     # any platform, no admin rights
 ```
 
-On Windows there is no reliable package manager entry, so download the
-`x86_64-pc-windows-msvc` zip from the
-[releases page](https://github.com/tectonic-typesetting/tectonic/releases) and
-unpack `tectonic.exe`. Put it on your `PATH`, or drop it in a `.tools/` folder
-inside this repo, or point at it explicitly:
+On Windows, download the `x86_64-pc-windows-msvc` zip from the
+[releases page](https://github.com/tectonic-typesetting/tectonic/releases), unpack
+`tectonic.exe`, and put it on `PATH`, in `.tools/`, or:
 
 ```
 $env:RESUME_TAILOR_TECTONIC = "C:\path\to\tectonic.exe"
@@ -110,8 +95,8 @@ Any OpenAI-compatible endpoint works.
 
 ```
 $env:OPENAI_API_KEY = "sk-..."
-$env:RESUME_TAILOR_MODEL = "gpt-4o-mini"   # optional, this is the default
-$env:OPENAI_BASE_URL = "http://localhost:11434/v1"   # optional: Ollama, OpenRouter, etc.
+$env:RESUME_TAILOR_MODEL = "gpt-4o-mini"   # optional; this is the default
+$env:OPENAI_BASE_URL = "http://localhost:11434/v1"   # optional: Ollama, etc.
 ```
 
 ## The browser interface
@@ -120,57 +105,48 @@ $env:OPENAI_BASE_URL = "http://localhost:11434/v1"   # optional: Ollama, OpenRou
 uv run resume-tailor serve
 ```
 
-Serves on `http://127.0.0.1:8765` and opens a browser. Two tabs:
+Serves on `http://127.0.0.1:8765` and opens a browser. Local mode (no
+`SUPABASE_URL`) edits `projects.yaml` with no login. Hosted mode shows a sign-in
+gate first.
 
-**Tailor.** Give it a posting three ways — paste a URL and hit Fetch, drop a PDF
-anywhere on the page, or paste the text. Set the bullet budget, and it shows
-every entry it picked with the score behind the pick, each chosen bullet with the
-requirements it matched, and what was left out and why. Then Build PDF compiles
-and previews inline, with download links for the PDF and the generated `.tex`.
+### Tailor tab
 
-URL fetching is best-effort. LinkedIn, Workday, and Greenhouse block automated
-requests or render postings with JavaScript, and when that happens the page says
-so and points you at the PDF or paste route rather than silently ranking against
-half a page of navigation text.
+Give it a posting three ways — URL + Fetch, drop a PDF, or paste text. Set the
+bullet budget; it shows every entry it picked with scores, which requirements
+each bullet matched, and what was left out and why. **Build PDF** compiles and
+previews inline, with downloads for the PDF and `.tex`.
 
-**Content.** A full editor for `projects.yaml`: profile, skill groups, education,
-every experience and project entry with its bullets, and leadership lines. Skills
-and tags are chips you add with Enter and remove with the ×; bullets can be
-added, reordered, and deleted. Save validates before writing and rewrites the
-file atomically, keeping the previous version as `projects.yaml.bak`.
+URL fetching is best-effort. LinkedIn, Workday, and Greenhouse often block
+automated fetches or render with JavaScript; use PDF or paste when that happens.
 
-**Import from resume.** On the Content tab, drop a resume PDF (or paste text).
-The model extracts profile, education, skills, experience, projects, and
-leadership into the editor as a draft — only claims present on the page, never
-invented bullets. Review the fields, then Save. That uses the same validated
-`ResumeStore` path as typing by hand.
+### Content tab
 
-Saving from the UI does not preserve comments you have hand-written in the YAML.
-The header block is regenerated; inline notes are not.
+Full editor for the store: profile, skill groups, education, experience/project
+entries with bullets, and leadership. Skills and tags are chips; bullets can be
+added, reordered, and deleted. **Save** validates, then writes (local: atomic
+YAML + `.bak`; hosted: upserts your Postgres row).
 
-Nothing about the UI changes the guarantee above. Text only enters the store
-through a validated `ResumeStore` (`PUT /api/store` after you review an import
-or type by hand).
+**Import from resume.** Drop a PDF or paste text. The model extracts profile,
+education, skills, experience, projects, and leadership into the editor as a
+draft — only claims present on the page. Review, then Save.
+
+Saving from the UI does not preserve hand-written YAML comments.
 
 ## Hosted mode for friends
 
-Local `serve` still uses `projects.yaml` on disk when `SUPABASE_URL` is unset.
-With Supabase configured, the same UI becomes invite-only and multi-user: each
-friend gets their own content store in Postgres, signs in with a magic link, and
-hits daily caps so one person cannot burn the shared OpenAI key.
-
-Stack (locked):
+With Supabase configured, the same UI is invite-only and multi-user: each person
+gets their own content store, signs in with a magic link (or the owner admin
+password), and hits daily caps so one user cannot burn the shared OpenAI key.
 
 | Piece | Choice |
 | --- | --- |
-| App | Fly.io Docker image — FastAPI + UI + Tectonic |
-| Auth + DB | Supabase Auth (magic link) + Postgres |
+| App | [ai-resume-tailor.fly.dev](https://ai-resume-tailor.fly.dev) — Docker, FastAPI + UI + Tectonic |
+| Region | `iad` (see `fly.toml`; volume must match) |
+| Auth + DB | Supabase Auth (magic link / PKCE) + Postgres |
 | Access | `allowed_users` email allowlist |
+| Owner bypass | Optional admin password login (`ADMIN_PASSWORD`, default `glorytothemoon`; set `off` to disable) |
 | Model | Shared `OPENAI_API_KEY`, default `gpt-4o-mini` |
-| Limits | 30 JD parses / 20 PDF compiles per user per UTC day (tunable) |
-
-Vercel is intentionally not used for the tailor pipeline. Tectonic needs a real
-process, disk, and enough time for package downloads.
+| Limits | 30 parses / 20 PDF compiles per user per UTC day (tunable; import counts as a parse) |
 
 ### 1. Supabase
 
@@ -184,41 +160,47 @@ insert into public.allowed_users (email, note)
 values ('you@example.com', 'owner');
 ```
 
-4. Auth → URL configuration: add your Fly URL (e.g.
-   `https://ai-resume-tailor.fly.dev`) to Redirect URLs.
-5. Copy from Project Settings → API:
+4. Authentication → URL configuration:
+   - Site URL: `https://ai-resume-tailor.fly.dev`
+   - Redirect URLs: `https://ai-resume-tailor.fly.dev` and
+     `https://ai-resume-tailor.fly.dev/**`
+5. Project Settings → API — copy:
    - Project URL → `SUPABASE_URL`
    - `anon` `public` key → `SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (server only)
-6. Project Settings → API → JWT Secret → `SUPABASE_JWT_SECRET`
-7. **Set up custom SMTP** — Authentication → Emails → SMTP Settings. This is
-   required, not optional. Supabase's built-in sender only delivers to addresses
-   that belong to your Supabase organization, and caps you at ~2 emails/hour.
-   Without it, magic links to anyone else silently never arrive, and your own
-   address starts failing with `over_email_send_rate_limit` after two tries.
-   Any transactional provider works (Resend, SendGrid, Postmark, Mailgun); plug
-   its host/port/user/password in, and set a sender address on a domain you have
-   verified with that provider.
+6. Project Settings → API → JWT Secret → `SUPABASE_JWT_SECRET` (optional
+   fallback; the server primarily verifies sessions via Supabase Auth
+   `GET /auth/v1/user`).
+7. **Custom SMTP (required for friends).** Authentication → Emails → SMTP
+   Settings. Supabase’s built-in sender only delivers reliably to org-member
+   addresses and caps you at roughly two emails/hour
+   (`over_email_send_rate_limit`). Use Resend, SendGrid, Postmark, Mailgun, etc.,
+   with a verified sender domain.
+
+Magic links use PKCE: request the link and open it in the **same browser** where
+you clicked “Send magic link”. A different phone/browser cannot finish the
+exchange.
 
 ### 2. Fly.io
 
 ```
 fly auth login
-# App name in fly.toml is ai-resume-tailor (ord). Create only if it does not exist yet:
+# App name in fly.toml is ai-resume-tailor. Create only if it does not exist yet:
 # fly apps create ai-resume-tailor
-fly volumes create tectonic_cache --region ord --size 1
+fly volumes create tectonic_cache --region iad --size 1
 fly secrets set \
   OPENAI_API_KEY=sk-... \
   SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
   SUPABASE_ANON_KEY=... \
   SUPABASE_SERVICE_ROLE_KEY=... \
   SUPABASE_JWT_SECRET=... \
-  RESUME_TAILOR_MODEL=gpt-4o-mini
+  RESUME_TAILOR_MODEL=gpt-4o-mini \
+  ADMIN_PASSWORD=glorytothemoon
 fly deploy
 ```
 
-If deploy fails with a mount error, the volume is missing — create it in the same
-region as `primary_region` in `fly.toml` (`ord`), then deploy again.
+If deploy fails with a mount error, create the volume in the same region as
+`primary_region` in `fly.toml` (`iad`), then deploy again.
 
 Optional caps:
 
@@ -226,12 +208,18 @@ Optional caps:
 fly secrets set RESUME_TAILOR_DAILY_PARSE_LIMIT=30 RESUME_TAILOR_DAILY_COMPILE_LIMIT=20
 ```
 
-Open `https://<app>.fly.dev` on your phone, request a magic link to an allowlisted
-email, then fill the Content tab (first login seeds an empty store). You can also
-drop a resume PDF on Content → Import to populate it.
+To disable the admin password form:
 
-To push a local `projects.yaml` into a hosted user's store (they must have signed
-in once so Auth has a user row):
+```
+fly secrets set ADMIN_PASSWORD=off
+```
+
+Open [https://ai-resume-tailor.fly.dev](https://ai-resume-tailor.fly.dev), sign
+in (magic link or admin password), then use Content → Import or the editor.
+First login seeds an empty store.
+
+Push a local `projects.yaml` into a hosted user’s store (they must have signed
+in once so Auth has a user row). Needs Supabase env vars locally:
 
 ```
 uv run resume-tailor seed-store --email you@example.com --projects projects.yaml
@@ -244,67 +232,53 @@ insert into public.allowed_users (email, note)
 values ('friend@example.com', 'classmate');
 ```
 
-Tell them the Fly URL. They sign in with that email. Their bullets never mix with
-yours — stores are keyed by `auth.users.id`.
+Tell them the Fly URL. They sign in with that email. Stores are keyed by
+`auth.users.id` — content never mixes.
 
-See [`.env.example`](.env.example) for every variable. Local CLI usage is
-unchanged and does not need Supabase.
+See [`.env.example`](.env.example) for every variable. Local CLI usage does not
+need Supabase.
 
 ## Command line usage
 
-`uv sync` installs the `resume-tailor` command into the project environment; run
-it with `uv run resume-tailor`, or activate `.venv` and drop the prefix.
-
-Check what would be selected before trusting it:
+`uv sync` installs the `resume-tailor` command; run it with `uv run resume-tailor`.
 
 ```
 uv run resume-tailor --jd posting.txt --dry-run
-```
-
-That prints the parsed posting, each selected entry with its score, each chosen
-bullet with its score and the terms it matched, and what was left out — marked
-either "outscored" or "no bullets written yet", which are different problems.
-
-Produce the PDF:
-
-```
 uv run resume-tailor --jd posting.txt --out resume.pdf
 cat posting.txt | uv run resume-tailor --out resume.pdf
 ```
 
-| Option | Purpose |
+| Option / command | Purpose |
 | --- | --- |
-| `--jd PATH` | The posting. Omit to read stdin. |
-| `--out PATH` | Where to write the PDF. Default `resume.pdf`. |
-| `--projects PATH` | Content store to use. Default `projects.yaml`. |
+| `--jd PATH` | Posting file. Omit to read stdin. |
+| `--out PATH` | PDF output. Default `resume.pdf`. |
+| `--projects PATH` | Content store. Default `projects.yaml`. |
 | `--max-bullets N` | Total bullet budget. Default 12. |
 | `--max-projects N` | Entries to include. Default 6. |
-| `--max-bullets-per-project N` | Cap per entry, so one project cannot fill the page. Default 3. |
-| `--dry-run` | Print the selection and scores, compile nothing. |
-| `--llm-rank` | Let the model reorder the shortlist. It cannot add to it. |
-| `--reorder-skills` | Move skills the posting asks for to the front of their line. |
-| `--emit-tex PATH` | Also write the generated `.tex`, for debugging the template. |
+| `--max-bullets-per-project N` | Cap per entry. Default 3. |
+| `--dry-run` | Print selection and scores; compile nothing. |
+| `--llm-rank` | Let the model reorder the shortlist (cannot add to it). |
+| `--reorder-skills` | Float matching skills to the front of their line. |
+| `--emit-tex PATH` | Also write the generated `.tex`. |
 | `--model NAME` | Override the model. |
 | `--tectonic PATH` | Override the Tectonic binary. |
+| `serve` | Browser UI (`--host`, `--port`, `--projects`, `--model`, `--tectonic`, `--no-open`). |
+| `seed-store` | Upload `--projects` into the hosted store for `--email` (Supabase env required). |
 
-`resume-tailor serve` takes `--projects`, `--host`, `--port`, `--model`,
-`--tectonic`, and `--no-open`.
+## Maintaining the content store
 
-## Maintaining projects.yaml
+The ranking can only choose among sentences already in the store, so a thin store
+produces a thin resume. Prefer the Content tab (or Import) over hand-editing
+YAML.
 
-This is the part that determines whether the output is any good. The tool can
-only choose among sentences you have already written, so a thin store produces a
-thin resume no matter how good the ranking is.
-
-The Content tab of `resume-tailor serve` edits all of this, which is usually
-easier than editing YAML by hand. Each entry looks like this:
+Each entry looks like this:
 
 ```yaml
 - id: rhv-gas-valve
   name: RHV - Gas Valve Calibration System
   role: Software Engineer Intern
   location: Terre Haute, IN
-  section: experience          # `experience` or `project`; decides where it renders
+  section: experience          # `experience` or `project`
   dates:
     start: Summer 2025
     end: Summer 2025           # or `present`
@@ -316,53 +290,38 @@ easier than editing YAML by hand. Each entry looks like this:
       control interface for a six-unit calibration system
 ```
 
-Guidance that matters in practice:
+Guidance:
 
 - **Write more bullets than fit.** Selection only helps if there is something to
-  select from. Eight bullets on a project you care about is not excessive; the
-  budget decides how many appear.
-- **Each bullet must stand alone.** They get reordered and printed
-  independently, so one that only makes sense after the previous one will read
-  strangely.
-- **`technologies` prints; `domains` and `keywords` do not.** The latter two are
-  matching metadata. Use them for the vocabulary a posting might use that your
-  bullets do not — "customer-facing", "CI/CD", "real-time". They are what let an
-  entry match a posting whose wording differs from yours.
-- **`always_include: true`** forces an entry through selection regardless of
-  score. Use sparingly.
-- **`organization` overrides the heading.** If set, the heading shows it instead
-  of `name`. Leave it out when the entry reads better under its full name.
-- The loader validates on every run and rejects unknown keys, so a typo like
-  `tecnologies:` is a loud error naming the entry, not silently missing content.
+  select from.
+- **Each bullet must stand alone.** They get reordered independently.
+- **`technologies` prints; `domains` and `keywords` do not.** Use the latter for
+  matching vocabulary that does not appear in the bullet text.
+- **`always_include: true`** forces an entry through selection. Use sparingly.
+- **`organization` overrides the heading** when set; omit it when the entry reads
+  better under `name`.
+- Unknown keys are rejected loudly (e.g. `tecnologies:`).
 
-### Before making this repo public
+### Privacy note
 
-The `projects.yaml` committed here is a sanitized placeholder: real structure,
-empty `bullets`, no phone number. Keep it that way. Maintain your real content
-in a copy the repo does not track, and point at it:
+The committed `projects.yaml` currently holds real profile content (name, phone,
+email, bullets) for local/demo use. Before making the repo public, strip or
+replace that file with a sanitized placeholder and keep your real store outside
+the repo:
 
 ```
 uv run resume-tailor --jd posting.txt --projects ~/private/projects.yaml
 ```
 
-`.gitignore` already excludes `*.pdf`, so generated resumes and your source
-resume stay out of the repo.
+`.gitignore` already excludes `*.pdf`.
 
 ## Editing the template
 
-`src/resume_tailor/templates/resume.tex` is plain LaTeX with Jinja placeholders,
-single column, no graphics, in reading order for ATS parsers. Two things to know
-before editing:
+`src/resume_tailor/templates/resume.tex` is plain LaTeX with Jinja placeholders
+(`\VAR{}`, `\BLOCK{}`), single column, ATS-friendly. Injected values are escaped
+by the environment’s `finalize` hook — you do not need an escape filter.
 
-- Jinja uses LaTeX-friendly delimiters here (`\VAR{}`, `\BLOCK{}`), so braces and
-  backslashes still mean what they mean in LaTeX. A line starting with two
-  percent signs is a Jinja line statement, and the delimiters are live inside
-  LaTeX comments too.
-- Injected values are escaped automatically by the environment's `finalize`
-  hook. You do not need an escape filter, and you cannot forget one.
-
-`--emit-tex out/resume.tex` writes the generated source when you are chasing a
-compile error.
+`--emit-tex out/resume.tex` writes the generated source when debugging compiles.
 
 ## Development
 
@@ -370,11 +329,9 @@ compile error.
 uv run pytest
 ```
 
-105+ tests, no network access. An autouse fixture makes any test that tries to
-construct a real LLM client fail, so the suite cannot start making live calls by
-accident. The end-to-end tests skip themselves if Tectonic is not installed.
-Hosted-mode tests fake JWTs and Supabase HTTP.
+~116 tests, no network. An autouse fixture fails any test that constructs a real
+LLM client. End-to-end compile tests skip if Tectonic is missing. Hosted-mode
+tests fake JWTs and Supabase HTTP.
 
-The browser UI is plain HTML, CSS, and DOM JavaScript under
-`src/resume_tailor/webui/` — no build step, no bundler, no CDN. Edit the files
-and reload the page.
+The browser UI is plain HTML/CSS/JS under `src/resume_tailor/webui/` — no build
+step. Edit and reload.
