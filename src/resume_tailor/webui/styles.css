@@ -765,7 +765,8 @@ select:focus {
   flex-direction: column;
   gap: 10px;
   max-width: 460px;
-  z-index: 20;
+  /* Above .login-gate (30) — sign-in errors surface on top of the gate. */
+  z-index: 40;
 }
 
 .toast {

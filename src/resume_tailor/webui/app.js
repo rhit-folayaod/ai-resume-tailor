@@ -267,6 +267,15 @@ async function sendMagicLink(email) {
   if (!response.ok) {
     localStorage.removeItem(PKCE_VERIFIER_KEY);
     const body = await response.json().catch(() => null);
+    const code = (body && body.error_code) || "";
+    if (code === "over_email_send_rate_limit" || response.status === 429) {
+      throw new Error(
+        "Supabase refused to send: email rate limit exceeded. Wait an hour, or " +
+          "configure custom SMTP in the Supabase dashboard (Authentication → Emails → SMTP). " +
+          "The built-in sender allows only a couple of emails per hour and delivers " +
+          "solely to Supabase team-member addresses.",
+      );
+    }
     throw new Error(
       (body && (body.error_description || body.msg || body.error)) || "could not send magic link",
     );

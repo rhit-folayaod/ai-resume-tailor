@@ -184,6 +184,14 @@ values ('you@example.com', 'owner');
    - `anon` `public` key → `SUPABASE_ANON_KEY`
    - `service_role` key → `SUPABASE_SERVICE_ROLE_KEY` (server only)
 6. Project Settings → API → JWT Secret → `SUPABASE_JWT_SECRET`
+7. **Set up custom SMTP** — Authentication → Emails → SMTP Settings. This is
+   required, not optional. Supabase's built-in sender only delivers to addresses
+   that belong to your Supabase organization, and caps you at ~2 emails/hour.
+   Without it, magic links to anyone else silently never arrive, and your own
+   address starts failing with `over_email_send_rate_limit` after two tries.
+   Any transactional provider works (Resend, SendGrid, Postmark, Mailgun); plug
+   its host/port/user/password in, and set a sender address on a domain you have
+   verified with that provider.
 
 ### 2. Fly.io
 
