@@ -1,6 +1,10 @@
-"""Supabase Auth JWT verification and invite allowlist.
+"""Supabase Auth verification and invite allowlist.
 
 Hosted mode only. Local `serve` without Supabase env vars skips this path.
+
+Tokens are validated by asking Supabase Auth who the bearer is
+(`GET /auth/v1/user`). That survives JWT secret / signing-key changes in the
+dashboard. Local HS256 decode remains as a fallback for tests.
 """
 
 from __future__ import annotations
@@ -15,7 +19,6 @@ from jwt import PyJWTError
 
 from .errors import AuthError
 
-# Supabase access tokens are HS256 with the project's JWT secret.
 ALGORITHM = "HS256"
 
 
@@ -32,13 +35,17 @@ class HostingConfig:
     supabase_url: str
     supabase_anon_key: str
     supabase_service_role_key: str
-    jwt_secret: str
+    jwt_secret: str = ""
     daily_parse_limit: int = 30
     daily_compile_limit: int = 20
 
     @property
     def rest_url(self) -> str:
         return f"{self.supabase_url.rstrip('/')}/rest/v1"
+
+    @property
+    def auth_url(self) -> str:
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
 
     @classmethod
     def from_env(cls) -> HostingConfig | None:
@@ -53,7 +60,6 @@ class HostingConfig:
             for name, value in (
                 ("SUPABASE_ANON_KEY", anon),
                 ("SUPABASE_SERVICE_ROLE_KEY", service),
-                ("SUPABASE_JWT_SECRET", secret),
             )
             if not value
         ]
@@ -87,10 +93,50 @@ def _int_env(name: str, default: int) -> int:
 
 
 def verify_access_token(token: str, config: HostingConfig) -> AuthUser:
-    """Validate a Supabase access JWT and return the user id + email."""
+    """Validate a Supabase access token and return the user id + email."""
 
     if not token:
         raise AuthError("sign in required.")
+
+    auth_error: AuthError | None = None
+    try:
+        return _user_from_auth_api(token, config)
+    except AuthError as exc:
+        auth_error = exc
+
+    if config.jwt_secret:
+        try:
+            return _user_from_jwt(token, config)
+        except AuthError:
+            pass
+
+    raise auth_error or AuthError("your session is invalid or expired; sign in again.")
+
+
+def _user_from_auth_api(token: str, config: HostingConfig) -> AuthUser:
+    headers = {
+        "apikey": config.supabase_anon_key,
+        "Authorization": f"Bearer {token}",
+    }
+    try:
+        response = httpx.get(f"{config.auth_url}/user", headers=headers, timeout=20.0)
+    except httpx.HTTPError as exc:
+        raise AuthError(f"could not reach Supabase Auth: {exc}") from exc
+    if response.status_code in (401, 403):
+        raise AuthError("your session is invalid or expired; sign in again.")
+    if response.status_code >= 400:
+        raise AuthError(
+            f"Supabase Auth lookup failed ({response.status_code}): {response.text[:200]}"
+        )
+    data = response.json()
+    user_id = data.get("id")
+    email = (data.get("email") or "").strip().lower()
+    if not user_id or not email:
+        raise AuthError("your session is missing an email; sign in again.")
+    return AuthUser(id=str(user_id), email=email)
+
+
+def _user_from_jwt(token: str, config: HostingConfig) -> AuthUser:
     try:
         payload = jwt.decode(
             token,

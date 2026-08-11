@@ -117,11 +117,33 @@ function showApp() {
 }
 
 function consumeAuthRedirect() {
+  // Supabase may put tokens in the hash (#access_token=...) or, less often,
+  // in the query string. Errors land the same way.
   const hash = window.location.hash.startsWith("#")
     ? window.location.hash.slice(1)
-    : window.location.hash;
-  if (!hash) return false;
-  const params = new URLSearchParams(hash);
+    : "";
+  const query = window.location.search.startsWith("?")
+    ? window.location.search.slice(1)
+    : "";
+  const params = new URLSearchParams(hash || query);
+  if (!hash && !query) return false;
+
+  const error = params.get("error_description") || params.get("error");
+  if (error) {
+    history.replaceState(null, "", window.location.pathname);
+    toast(decodeURIComponent(error.replace(/\+/g, " ")), "error");
+    return false;
+  }
+
+  if (params.get("code") && !params.get("access_token")) {
+    history.replaceState(null, "", window.location.pathname);
+    toast(
+      "This login link used a code the app cannot finish exchanging. In Supabase, set Site URL to https://ai-resume-tailor.fly.dev and add that same URL under Redirect URLs, then request a new magic link.",
+      "error",
+    );
+    return false;
+  }
+
   const access = params.get("access_token");
   const refresh = params.get("refresh_token");
   if (!access) return false;
@@ -130,7 +152,7 @@ function consumeAuthRedirect() {
     refresh_token: refresh || "",
     expires_at: Date.now() + Number(params.get("expires_in") || 3600) * 1000,
   });
-  history.replaceState(null, "", window.location.pathname + window.location.search);
+  history.replaceState(null, "", window.location.pathname);
   return true;
 }
 

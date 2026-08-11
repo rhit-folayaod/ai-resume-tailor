@@ -79,13 +79,37 @@ def auth_header(email: str = "friend@example.com", sub: str = "user-1") -> dict[
     return {"Authorization": f"Bearer {make_token(email=email, sub=sub)}"}
 
 
-def test_verify_access_token_reads_email_and_id():
+def test_verify_access_token_reads_email_and_id(monkeypatch):
+    # Auth API is tried first; force it to fail so the JWT fallback is exercised.
+    monkeypatch.setattr(
+        auth_mod,
+        "_user_from_auth_api",
+        lambda token, config: (_ for _ in ()).throw(AuthError("unreachable")),
+    )
     user = verify_access_token(make_token(), make_config())
     assert user.email == "friend@example.com"
     assert user.id == "user-1"
 
 
-def test_verify_rejects_bad_token():
+def test_verify_uses_auth_api_when_available(monkeypatch):
+    monkeypatch.setattr(
+        auth_mod,
+        "_user_from_auth_api",
+        lambda token, config: AuthUser(id="api-user", email="api@example.com"),
+    )
+    user = verify_access_token("any-token", make_config(jwt_secret=""))
+    assert user.id == "api-user"
+    assert user.email == "api@example.com"
+
+
+def test_verify_rejects_bad_token(monkeypatch):
+    monkeypatch.setattr(
+        auth_mod,
+        "_user_from_auth_api",
+        lambda token, config: (_ for _ in ()).throw(
+            AuthError("your session is invalid or expired; sign in again.")
+        ),
+    )
     with pytest.raises(AuthError, match="invalid or expired"):
         verify_access_token("not.a.jwt", make_config())
 

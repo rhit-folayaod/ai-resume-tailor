@@ -84,24 +84,29 @@ def create_app(
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
     def optional_user(request: Request) -> AuthUser | None:
-        """Local mode: always None. Hosted: None when no Bearer token."""
+        """Local mode: always None. Hosted: None when missing/invalid token.
+
+        Soft-fails so /api/health stays public even if a stale Bearer is sent.
+        """
 
         if hosting is None:
             return None
         header = request.headers.get("authorization")
         if not header:
             return None
-        token = extract_bearer(header)
-        user = verify_access_token(token, hosting)
-        return require_allowed_user(user, hosting)
+        try:
+            token = extract_bearer(header)
+            user = verify_access_token(token, hosting)
+            return require_allowed_user(user, hosting)
+        except AuthError:
+            return None
 
     def require_user(request: Request) -> AuthUser | None:
         if hosting is None:
             return None
-        user = optional_user(request)
-        if user is None:
-            raise AuthError("sign in required.")
-        return user
+        token = extract_bearer(request.headers.get("authorization"))
+        user = verify_access_token(token, hosting)
+        return require_allowed_user(user, hosting)
 
     def read_store_for(user: AuthUser | None) -> ResumeStore:
         if hosting is None or user is None:
