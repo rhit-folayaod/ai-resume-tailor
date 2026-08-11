@@ -111,6 +111,25 @@ h2 {
   margin-top: 14px;
 }
 
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 4px;
+  color: var(--muted, #6b7280);
+  font-size: 0.8rem;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, currentColor 35%, transparent);
+}
+
 .brand {
   display: flex;
   align-items: center;

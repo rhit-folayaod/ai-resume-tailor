@@ -38,6 +38,7 @@ def make_config(**overrides) -> HostingConfig:
         supabase_anon_key="anon-key",
         supabase_service_role_key="service-key",
         jwt_secret=JWT_SECRET,
+        admin_password="",
         daily_parse_limit=30,
         daily_compile_limit=20,
     )
@@ -118,7 +119,33 @@ def test_config_exposes_anon_key_not_service_role(client):
     body = client.get("/api/config").json()
     assert body["auth_required"] is True
     assert body["supabase_anon_key"] == "anon-key"
+    assert body["admin_login_enabled"] is False
     assert "service_role" not in body
+
+
+def test_admin_login_issues_token_and_opens_store(store_path, monkeypatch):
+    hosting = make_config(admin_password="glorytothemoon")
+    monkeypatch.setattr(auth_mod, "is_email_allowed", lambda email, config: False)
+    monkeypatch.setattr(
+        web,
+        "load_or_create_store",
+        lambda user, config: empty_store(email=user.email),
+    )
+    client = TestClient(web.create_app(store_path=store_path, hosting=hosting))
+
+    assert client.get("/api/config").json()["admin_login_enabled"] is True
+    bad = client.post("/api/admin-login", json={"password": "nope"})
+    assert bad.status_code == 401
+
+    ok = client.post("/api/admin-login", json={"password": "glorytothemoon"})
+    assert ok.status_code == 200, ok.text
+    token = ok.json()["access_token"]
+    me = client.get("/api/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["user"]["email"] == "admin@resume-tailor.local"
+    store = client.get("/api/store", headers={"Authorization": f"Bearer {token}"})
+    assert store.status_code == 200
+    assert store.json()["profile"]["email"] == "admin@resume-tailor.local"
 
 
 def test_store_requires_auth_when_hosted(store_path, hosting):

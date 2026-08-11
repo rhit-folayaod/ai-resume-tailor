@@ -21,8 +21,10 @@ from .auth import (
     AuthUser,
     HostingConfig,
     extract_bearer,
+    issue_admin_token,
     require_allowed_user,
     verify_access_token,
+    verify_admin_password,
 )
 from .compile import compile_pdf, find_tectonic
 from .db import load_or_create_store, save_user_store
@@ -131,7 +133,18 @@ def create_app(
             "supabase_anon_key": hosting.supabase_anon_key,
             "daily_parse_limit": hosting.daily_parse_limit,
             "daily_compile_limit": hosting.daily_compile_limit,
+            "admin_login_enabled": hosting.admin_login_enabled,
         }
+
+    @app.post("/api/admin-login")
+    def admin_login(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        """Password gate for owner testing when magic-link email is unavailable."""
+
+        if hosting is None or not hosting.admin_login_enabled:
+            raise AuthError("admin password login is disabled.")
+        password = str(payload.get("password") or "")
+        verify_admin_password(password, hosting)
+        return issue_admin_token(hosting)
 
     @app.get("/api/health")
     def health(user: AuthUser | None = Depends(optional_user)) -> dict[str, Any]:
