@@ -480,3 +480,15 @@ Eleven phases. Local CLI and local `serve` still work offline against
 `projects.yaml`. Hosted friends mode is code-complete; you still need to create
 the Supabase project, run the migration, set Fly secrets, and `fly deploy`.
 
+## Deploy fix — Fly Launch stub replaced
+
+Main had picked up Fly Launch's auto-generated `Dockerfile` /
+`fly.toml` (PRs #2/#3) but never merged the hosting branch. That Launch image
+was broken for this app: `pip install .` without `src/`, `CMD fastapi run`
+(wrong entrypoint, default port 8000 vs `internal_port` 8080), no Tectonic, and
+conflicting VM memory (`1gb` + `memory_mb = 256`).
+
+`fix/fly-deploy-hosting` merges the hosting stack and replaces those stubs with
+the working uvicorn + Tectonic image, keeping the existing Fly app name
+`ai-resume-tailor` and region `ord`.
+
