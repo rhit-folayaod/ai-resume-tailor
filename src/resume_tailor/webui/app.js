@@ -43,9 +43,12 @@ function el(tag, props = {}, children = []) {
 }
 
 function toast(message, kind = "") {
-  const node = el("div", { class: `toast ${kind}`, text: message });
+  const text = String(message || "").trim();
+  const short = text.length > 220 ? `${text.slice(0, 220)}…` : text;
+  const node = el("div", { class: `toast ${kind}`, text: short });
+  if (text.length > 220) node.title = text;
   $("toasts").appendChild(node);
-  setTimeout(() => node.remove(), kind === "error" ? 12000 : 5000);
+  setTimeout(() => node.remove(), kind === "error" ? 10000 : 5000);
 }
 
 function authHeaders() {

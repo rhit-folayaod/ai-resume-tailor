@@ -52,6 +52,46 @@ def test_projects_yaml_in_repo_is_valid():
     assert any(g.category.startswith("Languages") for g in store.skills)
 
 
+def test_coerce_skills_from_dict_and_flat_list():
+    from resume_tailor.resume_parser import _coerce_store_payload
+
+    as_dict = _coerce_store_payload(
+        {
+            "profile": {"name": "Ada"},
+            "skills": {"Languages": ["Python", "SQL"], "Tools": ["Git"]},
+            "projects": [],
+            "education": [],
+            "leadership": [],
+        }
+    )
+    assert as_dict["skills"] == [
+        {"category": "Languages", "items": ["Python", "SQL"]},
+        {"category": "Tools", "items": ["Git"]},
+    ]
+
+    flat = _coerce_store_payload(
+        {
+            "profile": {"name": "Ada"},
+            "skills": ["Python", "SQL"],
+            "projects": [
+                {
+                    "title": "Acme",
+                    "company": "Acme Corp",
+                    "dates": "Summer 2025",
+                    "bullets": ["Built things"],
+                }
+            ],
+            "education": [],
+            "leadership": [],
+        }
+    )
+    assert flat["skills"][0]["items"] == ["Python", "SQL"]
+    assert flat["projects"][0]["name"] == "Acme"
+    assert flat["projects"][0]["organization"] == "Acme Corp"
+    assert flat["projects"][0]["role"] == "contributor"
+    assert flat["projects"][0]["dates"] == {"start": "Summer 2025", "end": "Summer 2025"}
+
+
 def test_parse_resume_text_builds_store():
     draft = {
         "profile": {
