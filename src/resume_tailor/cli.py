@@ -316,5 +316,42 @@ def _note(message: str) -> None:
     click.secho(message, dim=True, err=True)
 
 
+@main.command("seed-store")
+@click.option(
+    "--email",
+    required=True,
+    help="Allowlisted user email whose hosted store should be overwritten.",
+)
+@click.option(
+    "--projects",
+    "store_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=DEFAULT_STORE_PATH,
+    show_default=True,
+    help="Local projects.yaml to upload into that user's store.",
+)
+def seed_store(email: str, store_path: Path) -> None:
+    """Push a local projects.yaml into a hosted user's Supabase store.
+
+    Requires SUPABASE_URL + service-role key. The user must already exist in
+    Supabase Auth (sign in once with a magic link first).
+    """
+
+    from .auth import HostingConfig
+    from .db import seed_store_for_email
+
+    hosting = HostingConfig.from_env()
+    if hosting is None:
+        raise ResumeTailorError(
+            "SUPABASE_URL is not set. seed-store only works in hosted mode."
+        )
+    store = load_store(store_path)
+    user = seed_store_for_email(email, store, hosting)
+    click.secho(
+        f"Seeded store for {user.email} ({user.id}) from {store_path.resolve()}",
+        fg="green",
+    )
+
+
 if __name__ == "__main__":
     main()

@@ -659,6 +659,29 @@ select:focus {
   gap: 10px;
 }
 
+.import-card {
+  margin-bottom: 18px;
+}
+
+.import-card .dropzone {
+  margin-top: 12px;
+}
+
+.import-paste {
+  margin-top: 14px;
+}
+
+.import-paste summary {
+  cursor: pointer;
+  color: var(--muted, #6b7280);
+  font-size: 0.9rem;
+}
+
+.import-paste textarea {
+  width: 100%;
+  margin-top: 10px;
+}
+
 .dirty {
   color: var(--warn);
   font-size: 12.5px;

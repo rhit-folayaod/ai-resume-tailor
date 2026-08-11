@@ -192,6 +192,35 @@
             <button class="button button-primary" id="save-button">Save</button>
           </div>
         </div>
+        <section class="card import-card">
+          <h2>Import from resume</h2>
+          <p class="hint">
+            Drop a PDF (or paste text). We extract profile, education, skills, experience,
+            projects, and leadership into the editor below — only what is on the page, never
+            invented. Review, then Save.
+          </p>
+          <label class="dropzone" id="resume-dropzone" for="resume-file-input">
+            <strong>Drop your resume PDF here</strong>
+            <span>or click to choose a file &mdash; .pdf, .txt, .md, .docx text exports</span>
+            <input
+              id="resume-file-input"
+              type="file"
+              accept=".pdf,.txt,.md,.html,.htm"
+              hidden
+            />
+          </label>
+          <details class="import-paste">
+            <summary>Or paste resume text</summary>
+            <textarea
+              id="resume-paste"
+              rows="8"
+              placeholder="Paste the full resume text here."
+            ></textarea>
+            <button class="button" id="resume-paste-button" style="margin-top: 10px">
+              Parse pasted resume
+            </button>
+          </details>
+        </section>
         <div id="editor"></div>
       </section>
     </main>

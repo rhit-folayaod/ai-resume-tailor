@@ -3,26 +3,14 @@
 # This is the ONLY place resume content comes from. The tool selects, ranks, and
 # reorders what is written here; it never rewrites a bullet or invents a new one.
 # If a claim is not in this file, it cannot appear in a generated resume.
-#
-# Bullets are shipped empty on purpose. Write each one yourself, in your own
-# words, as a complete accomplishment statement that could stand alone on a
-# resume. `technologies`, `domains`, and `keywords` are matching metadata: they
-# are what the ranker scores against, and they are never printed verbatim except
-# for `technologies` on project entries.
-#
-# `domains` and `keywords` are left empty on purpose: nothing here is inferred on
-# your behalf. Fill them in as you go (e.g. domains: backend, hardware, data,
-# customer-facing) — the ranker matches against them, so empty means an entry
-# only matches on its `technologies`.
-#
-# Sanitize this file before making the repo public (see README).
 
 profile:
   name: David Oluwatimilehin "Timi" Folayan
-  phone: ""            # fill in locally; left blank so it is not committed
-  email: folayaod@rose-hulman.edu
+  phone: "(615) 779-0421"
+  email: timilehindfolayan@gmail.com
   links:
     - linkedin.com/in/timifolayan
+    - folayaod@rose-hulman.edu
 
 education:
   - school: Rose-Hulman Institute of Technology
@@ -82,11 +70,29 @@ projects:
     technologies: []
     domains: []
     keywords: []
-    bullets: []
+    bullets:
+      - >-
+        Tasked with supporting the sales engineering team through developing
+        opportunity pipeline from inbound sales demand and proposing tailored
+        hardware and software solutions with prospective customers, generating
+        over $2,600,000+ in opportunity dollars individually
+      - >-
+        Built technical proficiency across NI's measurement and automation
+        portfolio while developing consultative selling and customer-facing
+        communication skills. Led live demonstrations of the MioDAQ platform at
+        a company-wide Tech Expo, translating complex technical concepts into
+        customer value, helping to drive new business and relationships
+      - >-
+        Created and documented multiple internal projects showcasing NI's
+        hardware/software capabilities, supporting community outreach
+        initiatives and increasing NI's visibility
+      - >-
+        Utilized LinkedIn Sales Navigator to build account intelligence, uncover
+        prospecting opportunities, and strengthen customer engagement
+        strategies, supporting sales engineers in identifying and qualifying
+        potential opportunities
 
   - id: rhv-gas-valve
-    # No `organization` here: the heading line uses `organization` when set and
-    # `name` otherwise, and this entry reads better as the full project name.
     name: RHV - Gas Valve Calibration System
     role: Software Engineer Intern
     location: Terre Haute, IN
@@ -102,21 +108,19 @@ projects:
       - PLCs
     domains: []
     keywords: []
-    bullets: []
-
-  - id: jetpack-daq-demo
-    name: Jetpack DAQ Demo
-    organization: Emerson-NI (National Instruments)
-    role: internal project
-    location: Austin, TX
-    section: project
-    dates:
-      start: Summer 2026
-      end: Summer 2026
-    technologies: []      # fill in: what you actually built it with
-    domains: []
-    keywords: []
-    bullets: []
+    bullets:
+      - >-
+        As the sole software engineer on a multidisciplinary team of electrical,
+        computer, and mechanical engineers, built a multithreaded WinForms
+        application in C# to serve as the central control interface for a
+        six-unit calibration system
+      - >-
+        Implemented Modbus TCP/IP and serial communication to coordinate PLCs
+        and programmable power supplies, synchronizing thermal, pressure, and
+        flow testing in real time across all six units
+      - >-
+        Enabled high-throughput calibration of over 1,000,000 gas valves with
+        minimal operator intervention
 
   - id: rose-hulman-ta
     name: Formal Methods Teaching Assistant
@@ -130,7 +134,13 @@ projects:
     technologies: []
     domains: []
     keywords: []
-    bullets: []
+    bullets:
+      - >-
+        Supported undergraduate students in mastering formal methods concepts,
+        including logic, specifications, and program correctness
+      - >-
+        Assisted with grading assignments and providing detailed feedback on
+        formal proofs and model-based designs
 
   - id: ask-rose
     name: Ask Rose Homework Hotline
@@ -144,7 +154,16 @@ projects:
     technologies: []
     domains: []
     keywords: []
-    bullets: []
+    bullets:
+      - >-
+        Assisted students from grades 6-12 with STEM homework problems, focusing
+        on mathematics, physics, and computer science, resulting in a 99%
+        student satisfaction rate
+      - >-
+        Provided clear explanations and guided students through problem-solving
+        techniques to develop a deeper understanding of core concepts, leading
+        to a measurable improvement in students' skills, with 80% reporting
+        increased confidence
 
   - id: nba-player-predictor
     name: NBA Player Predictor
@@ -163,7 +182,20 @@ projects:
       - Kubernetes
     domains: []
     keywords: []
-    bullets: []
+    bullets:
+      - >-
+        Set out to predict a player's next-game point total against a specific
+        opponent; trained a RandomForestRegressor on real player/team data from
+        PostgreSQL using matchup-aware features (scoring averages, opponent
+        points allowed) instead of opaque IDs
+      - >-
+        Tracked 10 experiment runs in MLflow, varying tree depth and test split,
+        and promoted the lowest-MAE model to the Model Registry under a
+        production alias
+      - >-
+        Deployed the model via containerized FastAPI with CI/CD through GitHub
+        Actions to GKE, automating QA releases and gating production for
+        reliability
 
   - id: settlers-of-catan
     name: Settlers of Catan
@@ -178,7 +210,15 @@ projects:
       - VS Code
     domains: []
     keywords: []
-    bullets: []
+    bullets:
+      - >-
+        Developed a Java implementation of Settlers of Catan using a
+        multi-package Maven structure to organize game logic, board state, and
+        player management
+      - >-
+        Diagnosed and resolved cross-package compilation and classpath failures,
+        including broken i18n resource bundle loading, and solely implemented a
+        clean German-language locale from scratch
 
   - id: lost-and-found-db
     name: Lost and Found Database
@@ -194,10 +234,17 @@ projects:
       - Microsoft SQL Server
     domains: []
     keywords: []
-    bullets: []
+    bullets:
+      - >-
+        Designed and built a database system for a lost and found application
+        using Microsoft SQL Server, reducing item retrieval time by 40%
+      - >-
+        Developed a Java-based interface with integrated SQL connectivity,
+        applying OOP design principles to improve usability and long-term
+        maintainability
 
 leadership:
-  - Vice President, African Student Union - 2024-Present
-  - Public Relations Chair, National Society of Black Engineers - 2024-Present
-  - Member, Linux Users Group & Computer Security Club - 2023-Present
-  - Member, ColorStack - 2023-Present
+  - Vice President, African Student Union – 2024–Present
+  - Public Relations Chair, National Society of Black Engineers – 2024–Present
+  - Member, Linux Users Group & Computer Security Club – 2023–Present
+  - Member, ColorStack – 2023–Present

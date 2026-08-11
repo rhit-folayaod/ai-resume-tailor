@@ -139,11 +139,18 @@ and tags are chips you add with Enter and remove with the ×; bullets can be
 added, reordered, and deleted. Save validates before writing and rewrites the
 file atomically, keeping the previous version as `projects.yaml.bak`.
 
+**Import from resume.** On the Content tab, drop a resume PDF (or paste text).
+The model extracts profile, education, skills, experience, projects, and
+leadership into the editor as a draft — only claims present on the page, never
+invented bullets. Review the fields, then Save. That uses the same validated
+`ResumeStore` path as typing by hand.
+
 Saving from the UI does not preserve comments you have hand-written in the YAML.
 The header block is regenerated; inline notes are not.
 
-Nothing about the UI changes the guarantee above. `PUT /api/store` is the only
-way text enters the store, and that is you typing it.
+Nothing about the UI changes the guarantee above. Text only enters the store
+through a validated `ResumeStore` (`PUT /api/store` after you review an import
+or type by hand).
 
 ## Hosted mode for friends
 
@@ -220,7 +227,15 @@ fly secrets set RESUME_TAILOR_DAILY_PARSE_LIMIT=30 RESUME_TAILOR_DAILY_COMPILE_L
 ```
 
 Open `https://<app>.fly.dev` on your phone, request a magic link to an allowlisted
-email, then fill the Content tab (first login seeds an empty store).
+email, then fill the Content tab (first login seeds an empty store). You can also
+drop a resume PDF on Content → Import to populate it.
+
+To push a local `projects.yaml` into a hosted user's store (they must have signed
+in once so Auth has a user row):
+
+```
+uv run resume-tailor seed-store --email you@example.com --projects projects.yaml
+```
 
 ### 3. Invite a friend
 

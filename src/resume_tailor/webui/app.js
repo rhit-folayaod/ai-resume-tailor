@@ -484,21 +484,33 @@ async function uploadFile(file) {
 $("file-input").addEventListener("change", (event) => uploadFile(event.target.files[0]));
 
 const dropzone = $("dropzone");
+const resumeDropzone = $("resume-dropzone");
+function contentTabActive() {
+  return $("panel-content").classList.contains("is-active");
+}
 ["dragenter", "dragover"].forEach((name) =>
   document.addEventListener(name, (event) => {
     event.preventDefault();
-    dropzone.classList.add("is-over");
+    if (contentTabActive()) resumeDropzone.classList.add("is-over");
+    else dropzone.classList.add("is-over");
   }),
 );
 ["dragleave", "drop"].forEach((name) =>
   document.addEventListener(name, (event) => {
     event.preventDefault();
-    if (name === "drop" || event.relatedTarget === null) dropzone.classList.remove("is-over");
+    if (name === "drop" || event.relatedTarget === null) {
+      dropzone.classList.remove("is-over");
+      resumeDropzone.classList.remove("is-over");
+    }
   }),
 );
 document.addEventListener("drop", (event) => {
   const file = event.dataTransfer && event.dataTransfer.files[0];
   if (!file) return;
+  if (contentTabActive()) {
+    importResumeFile(file);
+    return;
+  }
   // A file can be dropped anywhere on the page; switch to the file tab so the
   // result is visible rather than hidden behind another mode.
   document.querySelector('.segment[data-mode="file"]').click();
@@ -989,6 +1001,50 @@ async function loadStore() {
     toast(error.message, "error");
   }
 }
+
+function applyImportedStore(store, source) {
+  state.store = store;
+  renderEditor();
+  markDirty();
+  document.querySelector('.tab[data-tab="content"]').click();
+  toast(
+    `Imported ${source}. Review the editor, then Save to keep it.`,
+    "success",
+  );
+}
+
+async function importResumeFile(file) {
+  if (!file) return;
+  toast("Parsing resume…");
+  try {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    const result = await api("/api/import-resume", { method: "POST", body: form });
+    applyImportedStore(result.store, result.source || file.name);
+  } catch (error) {
+    toast(error.message, "error");
+  }
+}
+
+$("resume-file-input").addEventListener("change", (event) =>
+  importResumeFile(event.target.files[0]),
+);
+
+$("resume-paste-button").addEventListener("click", async () => {
+  const text = $("resume-paste").value.trim();
+  if (!text) return;
+  const done = busy($("resume-paste-button"), "Parsing");
+  try {
+    const form = new FormData();
+    form.append("text", text);
+    const result = await api("/api/import-resume", { method: "POST", body: form });
+    applyImportedStore(result.store, result.source || "pasted resume");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    done();
+  }
+});
 
 $("save-button").addEventListener("click", async () => {
   const done = busy($("save-button"), "Saving");

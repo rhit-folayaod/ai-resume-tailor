@@ -53,6 +53,51 @@ def save_user_store(user: AuthUser, store: ResumeStore, config: HostingConfig) -
     return store
 
 
+def find_auth_user_by_email(email: str, config: HostingConfig) -> AuthUser:
+    """Look up a Supabase Auth user id by email (service role)."""
+
+    normalized = email.strip().lower()
+    if not normalized:
+        raise DatabaseError("email is required.")
+    headers = _headers(config)
+    try:
+        response = httpx.get(
+            f"{config.auth_url}/admin/users",
+            params={"page": "1", "per_page": "200"},
+            headers=headers,
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        raise DatabaseError(f"could not reach Supabase Auth admin: {exc}") from exc
+    if response.status_code >= 400:
+        raise DatabaseError(
+            f"Supabase Auth admin lookup failed ({response.status_code}): "
+            f"{response.text[:200]}"
+        )
+    body = response.json()
+    users = body.get("users") if isinstance(body, dict) else body
+    if not isinstance(users, list):
+        raise DatabaseError("unexpected Supabase Auth admin response.")
+    for row in users:
+        if not isinstance(row, dict):
+            continue
+        row_email = (row.get("email") or "").strip().lower()
+        if row_email == normalized and row.get("id"):
+            return AuthUser(id=str(row["id"]), email=row_email)
+    raise DatabaseError(
+        f"no auth user found for {normalized}. They must sign in once (magic link) "
+        "so Supabase creates the account, then seed again."
+    )
+
+
+def seed_store_for_email(email: str, store: ResumeStore, config: HostingConfig) -> AuthUser:
+    """Upsert `store` for the Auth user with this email."""
+
+    user = find_auth_user_by_email(email, config)
+    save_user_store(user, store, config)
+    return user
+
+
 def _headers(config: HostingConfig, *, prefer: str | None = None) -> dict[str, str]:
     headers = {
         "apikey": config.supabase_service_role_key,

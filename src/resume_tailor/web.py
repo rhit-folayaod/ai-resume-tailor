@@ -36,6 +36,7 @@ from .llm import DEFAULT_MODEL, LLMClient, OpenAIClient
 from .models import ResumeStore
 from .ranking import Selection, SelectionBudget, select
 from .rate_limit import check_and_record
+from .resume_parser import parse_resume_text
 from .store import DEFAULT_STORE_PATH, format_validation_error, load_store, save_store
 
 WEBUI_DIR = Path(__file__).parent / "webui"
@@ -212,6 +213,43 @@ def create_app(
         if url:
             return {"text": text_from_url(url), "source": url}
         raise ResumeTailorError("give me a URL or a file.")
+
+    @app.post("/api/import-resume")
+    async def import_resume(
+        user: AuthUser | None = Depends(require_user),
+        file: UploadFile | None = File(default=None),
+        text: str | None = Form(default=None),
+        apply: str | None = Form(default=None),
+    ) -> dict[str, Any]:
+        """Parse an uploaded resume into a content-store draft.
+
+        By default returns the draft for the browser to preview. Set apply=1 to
+        replace the signed-in user's saved store immediately.
+        """
+
+        if hosting is not None and user is not None:
+            check_and_record(user, "parse", hosting)
+
+        if file is not None:
+            data = await file.read()
+            resume_text = text_from_upload(file.filename or "resume", data)
+            source = file.filename or "uploaded resume"
+        elif text and text.strip():
+            resume_text = text
+            source = "pasted resume"
+        else:
+            raise ResumeTailorError("drop a resume PDF/file or paste the resume text.")
+
+        store = parse_resume_text(resume_text, make_client(model))
+        applied = False
+        if (apply or "").strip().lower() in {"1", "true", "yes", "on"}:
+            write_store_for(user, store)
+            applied = True
+        return {
+            "source": source,
+            "applied": applied,
+            "store": store.model_dump(mode="json"),
+        }
 
     @app.post("/api/tailor")
     def tailor(
