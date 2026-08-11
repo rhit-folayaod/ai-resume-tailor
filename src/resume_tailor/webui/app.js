@@ -18,6 +18,7 @@ const state = {
   authRequired: false,
   supabaseUrl: "",
   supabaseAnonKey: "",
+  adminLoginEnabled: false,
   session: null,
   userEmail: "",
 };
@@ -267,6 +268,15 @@ async function sendMagicLink(email) {
   if (!response.ok) {
     localStorage.removeItem(PKCE_VERIFIER_KEY);
     const body = await response.json().catch(() => null);
+    const code = (body && body.error_code) || "";
+    if (code === "over_email_send_rate_limit" || response.status === 429) {
+      throw new Error(
+        "Supabase refused to send: email rate limit exceeded. Wait an hour, or " +
+          "configure custom SMTP in the Supabase dashboard (Authentication → Emails → SMTP). " +
+          "The built-in sender allows only a couple of emails per hour and delivers " +
+          "solely to Supabase team-member addresses.",
+      );
+    }
     throw new Error(
       (body && (body.error_description || body.msg || body.error)) || "could not send magic link",
     );
@@ -317,6 +327,45 @@ $("login-button").addEventListener("click", async () => {
 
 $("login-email").addEventListener("keydown", (event) => {
   if (event.key === "Enter") $("login-button").click();
+});
+
+async function adminPasswordLogin(password) {
+  const response = await fetch("/api/admin-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error((body && body.error) || "admin sign-in failed");
+  }
+  saveSession({
+    access_token: body.access_token,
+    refresh_token: body.refresh_token || "",
+    expires_at: Date.now() + Number(body.expires_in || 3600) * 1000,
+  });
+  state.userEmail = (body.user && body.user.email) || "admin@resume-tailor.local";
+}
+
+$("admin-login-button").addEventListener("click", async () => {
+  const password = $("admin-password").value;
+  if (!password) return;
+  const done = busy($("admin-login-button"), "Signing in");
+  try {
+    await adminPasswordLogin(password);
+    showApp();
+    await loadHealth();
+    await loadStore();
+    toast("Signed in as admin.", "success");
+  } catch (error) {
+    toast(error.message, "error");
+  } finally {
+    done();
+  }
+});
+
+$("admin-password").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") $("admin-login-button").click();
 });
 
 $("logout-button").addEventListener("click", () => {
@@ -981,6 +1030,18 @@ async function boot() {
   state.authRequired = Boolean(config.auth_required);
   state.supabaseUrl = config.supabase_url || "";
   state.supabaseAnonKey = config.supabase_anon_key || "";
+  state.adminLoginEnabled = Boolean(config.admin_login_enabled);
+  if (state.adminLoginEnabled) {
+    $("login-admin").classList.remove("is-hidden");
+  }
+
+  // Need Supabase URL/anon key before exchanging a ?code= from the magic link.
+  try {
+    await consumeAuthRedirect();
+  } catch (error) {
+    toast(error.message, "error");
+  }
+  loadSession();
 
   // Need Supabase URL/anon key before exchanging a ?code= from the magic link.
   try {
